@@ -1,0 +1,96 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.pyright/
+.ruff_cache/
+.hypothesis/
+.pytype/
+.dmypy.json
+dmypy.json
+
+# Virtual environments
+venv/
+venv*/
+.venv/
+.venv*/
+env/
+ENV/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Tests and coverage
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+pytest.xml
+test-results/
+.tox/
+.nox/
+
+# Build and packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+wheels/
+pip-wheel-metadata/
+
+# Logs and runtime files
+*.log
+logs/
+*.pid
+*.pid.lock
+
+# FastAPI / Uvicorn / Gunicorn
+.uvicorn/
+gunicorn.pid
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+celeryev.pid
+
+# Local databases and Redis dumps
+*.db
+*.sqlite
+*.sqlite3
+dump.rdb
+
+# Generated runtime files
+uploads/
+generated/
+tmp/
+temp/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDEs
+.vscode/
+.idea/
+*.code-workspace
+*.swp
+*.swo
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# Miscellaneous
+.cache/
+.python-version
