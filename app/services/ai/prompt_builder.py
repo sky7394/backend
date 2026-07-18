@@ -1,5 +1,5 @@
 from app.prompts.exam_prompts import DIFFICULTY_LABELS, QUESTION_TYPE_LABELS
-from app.schemas.question import ExamGenerateRequest
+from app.schemas.generate import ExamGenerateRequest
 
 
 def build_exam_prompt(request: ExamGenerateRequest) -> str:

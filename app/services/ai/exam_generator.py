@@ -1,4 +1,4 @@
-from app.schemas.question import ExamGenerateRequest, ExamOut
+from app.schemas.generate import ExamGenerateRequest, ExamOut
 from app.services.ai.gemini_service import generate_exam
 
 

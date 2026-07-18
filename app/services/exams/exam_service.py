@@ -1,6 +1,6 @@
 from fastapi.concurrency import run_in_threadpool
 
-from app.schemas.question import ExamGenerateRequest, ExamOut
+from app.schemas.generate import ExamGenerateRequest, ExamOut
 from app.services.ai.exam_generator import generate_exam_with_ai
 from app.services.exams.exam_storage import save_generated_exam
 

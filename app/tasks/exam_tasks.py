@@ -1,4 +1,4 @@
-from app.schemas.question import ExamGenerateRequest
+from app.schemas.generate import ExamGenerateRequest
 from app.services.ai.exam_generator import generate_exam_with_ai
 from app.tasks.celery_app import celery_app
 
