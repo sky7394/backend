@@ -15,9 +15,9 @@ router = APIRouter(prefix="/exam", tags=["Exam"])
 
 
 @router.post("/generate", response_model=ExamOut)
-async def generate_exam_endpoint(request: ExamGenerateRequest):
+async def generate_exam_endpoint(request: ExamGenerateRequest, preview: bool = False):
     try:
-        return await generate_exam(request)
+        return await generate_exam(request, preview=preview)
     except AIProviderConfigurationError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

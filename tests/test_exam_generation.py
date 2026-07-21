@@ -146,6 +146,48 @@ class ExamEndpointTests(unittest.TestCase):
             "difficulty": "medium",
             "topic": "Cells",
         }
+        self.generated_exam = generation_schemas.ExamOut(
+            title="Cell Biology",
+            grade=7,
+            subject="Science",
+            questions=[
+                generation_schemas.QuestionOut(
+                    id=1,
+                    question_text="What controls a cell?",
+                    question_type="multiple_choice",
+                    difficulty="medium",
+                    grade=7,
+                    subject="Science",
+                    topic="Cells",
+                    options=["Nucleus", "Membrane"],
+                    correct_answer="Nucleus",
+                )
+            ],
+        )
+
+    def test_preview_response_uses_final_exam_structure(self):
+        with patch(
+            "app.api.v1.endpoints.exams.generate_exam",
+            new=AsyncMock(return_value=self.generated_exam),
+        ) as generate_exam:
+            response = self.client.post("/exam/generate?preview=true", json=self.payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), self.generated_exam.model_dump(mode="json"))
+        generate_exam.assert_awaited_once()
+        request = generate_exam.await_args.args[0]
+        self.assertEqual(request.model_dump(mode="json"), self.payload)
+        self.assertTrue(generate_exam.await_args.kwargs["preview"])
+
+    def test_default_endpoint_behavior_disables_preview(self):
+        with patch(
+            "app.api.v1.endpoints.exams.generate_exam",
+            new=AsyncMock(return_value=self.generated_exam),
+        ) as generate_exam:
+            response = self.client.post("/exam/generate", json=self.payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(generate_exam.await_args.kwargs["preview"])
 
     def test_known_ai_failures_return_safe_status_codes(self):
         cases = (
@@ -170,6 +212,16 @@ class ExamEndpointTests(unittest.TestCase):
                 self.assertNotIn("secret", response_text.lower())
                 self.assertNotIn("raw-provider-response", response_text)
 
+    def test_preview_uses_safe_error_mapping(self):
+        with patch(
+            "app.api.v1.endpoints.exams.generate_exam",
+            new=AsyncMock(side_effect=AIResponseValidationError("raw-invalid-data")),
+        ):
+            response = self.client.post("/exam/generate?preview=true", json=self.payload)
+
+        self.assertEqual(response.status_code, 422)
+        self.assertNotIn("raw-invalid-data", response.text)
+
     def test_unexpected_failure_returns_generic_500(self):
         with patch(
             "app.api.v1.endpoints.exams.generate_exam",
@@ -183,9 +235,10 @@ class ExamEndpointTests(unittest.TestCase):
 
 
 class ExamServiceTests(unittest.TestCase):
-    def test_generate_exam_preserves_generate_save_return_workflow(self):
+    def setUp(self):
         request = generation_schemas.ExamGenerateRequest(grade=7, subject="Science")
-        generated_exam = generation_schemas.ExamOut(
+        self.request = request
+        self.generated_exam = generation_schemas.ExamOut(
             title="Science Exam",
             grade=7,
             subject="Science",
@@ -202,23 +255,52 @@ class ExamServiceTests(unittest.TestCase):
                 )
             ],
         )
-        saved_exam = generated_exam.model_copy(update={"title": "Saved Science Exam"})
+
+    def test_generate_exam_preserves_generate_save_return_workflow(self):
+        saved_exam = self.generated_exam.model_copy(update={"title": "Saved Science Exam"})
 
         with (
             patch(
                 "app.services.exams.exam_service.generate_exam_with_ai",
-                return_value=generated_exam,
+                return_value=self.generated_exam,
             ) as generate_exam_with_ai,
             patch(
                 "app.services.exams.exam_service.save_generated_exam",
                 return_value=saved_exam,
             ) as save_generated_exam,
         ):
-            result = run(generate_and_save_exam(request))
+            result = run(generate_and_save_exam(self.request))
 
-        generate_exam_with_ai.assert_called_once_with(request)
-        save_generated_exam.assert_called_once_with(generated_exam)
+        generate_exam_with_ai.assert_called_once_with(self.request)
+        save_generated_exam.assert_called_once_with(self.generated_exam)
         self.assertIs(result, saved_exam)
+
+    def test_preview_generates_and_validates_without_saving(self):
+        with (
+            patch(
+                "app.services.exams.exam_service.generate_exam_with_ai",
+                return_value=self.generated_exam,
+            ) as generate_exam_with_ai,
+            patch("app.services.exams.exam_service.save_generated_exam") as save_generated_exam,
+        ):
+            result = run(generate_and_save_exam(self.request, preview=True))
+
+        generate_exam_with_ai.assert_called_once_with(self.request)
+        save_generated_exam.assert_not_called()
+        self.assertIs(result, self.generated_exam)
+
+    def test_preview_validation_failure_does_not_save(self):
+        with (
+            patch(
+                "app.services.exams.exam_service.generate_exam_with_ai",
+                return_value={"title": "Invalid exam"},
+            ),
+            patch("app.services.exams.exam_service.save_generated_exam") as save_generated_exam,
+        ):
+            with self.assertRaises(AIResponseValidationError):
+                run(generate_and_save_exam(self.request, preview=True))
+
+        save_generated_exam.assert_not_called()
 
 
 if __name__ == "__main__":
