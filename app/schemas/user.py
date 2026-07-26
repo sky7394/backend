@@ -1,7 +1,7 @@
 # app/schemas/user.py
 
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, ConfigDict
 
 
 # ---------- Request Schemas ----------
@@ -20,14 +20,13 @@ class UserLogin(BaseModel):
 # ---------- Response Schemas ----------
 
 class UserBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     email: EmailStr
     full_name: str | None = None
     role: str
-
-    class Config:
-        from_attributes = True
-
+    
 
 class TokenResponse(BaseModel):
     access_token: str

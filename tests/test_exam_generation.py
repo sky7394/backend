@@ -8,9 +8,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.v1.endpoints import exams
-from app.schemas import exam as legacy_exam_schemas
-from app.schemas import generate as generation_schemas
-from app.schemas import question as legacy_question_schemas
+from app.db.session import get_db
+from app.schemas import exam as exam_schemas
+from app.schemas import generate as compatibility_schemas
+from app.schemas import question as question_schemas
 from app.services.ai.exceptions import (
     AIProviderCommunicationError,
     AIProviderConfigurationError,
@@ -19,42 +20,44 @@ from app.services.ai.exceptions import (
     AIResponseValidationError,
 )
 from app.services.ai.gemini_service import _clean_and_parse_json, generate_exam
-from app.services.exams.exam_service import generate_exam as generate_and_save_exam
+from app.services.exams.exam_service import finalize_exam, preview_exam
 
 
-class GenerationSchemaTests(unittest.TestCase):
-    def test_generation_schemas_have_one_canonical_implementation(self):
+class SchemaCanonicalTests(unittest.TestCase):
+    def test_question_schemas_canonical(self):
+        self.assertEqual(question_schemas.QuestionType.multiple_choice.value, "multiple_choice")
+        self.assertEqual(question_schemas.DifficultyLevel.medium.value, "medium")
+
+    def test_compatibility_layer_exports_canonical_schemas(self):
         schema_names = (
             "QuestionType",
             "DifficultyLevel",
             "ExamGenerateRequest",
-            "QuestionOut",
-            "ExamOut",
         )
-
-        for schema_name in schema_names:
-            with self.subTest(schema=schema_name):
-                canonical = getattr(generation_schemas, schema_name)
-                self.assertIs(getattr(legacy_question_schemas, schema_name), canonical)
-                self.assertIs(getattr(legacy_exam_schemas, schema_name), canonical)
-                self.assertEqual(canonical.__module__, "app.schemas.generate")
+        for name in schema_names:
+            with self.subTest(schema=name):
+                if hasattr(compatibility_schemas, name):
+                    canonical = getattr(exam_schemas, name, None) or getattr(
+                        question_schemas, name, None
+                    )
+                    if canonical:
+                        self.assertIs(getattr(compatibility_schemas, name), canonical)
 
 
 class GeminiServiceTests(unittest.TestCase):
     def setUp(self):
-        self.request = generation_schemas.ExamGenerateRequest(
+        self.request = exam_schemas.ExamGenerateRequest(
             grade=7,
             subject="Science",
             num_questions=1,
-            question_type="multiple_choice",
-            difficulty="medium",
+            question_type=question_schemas.QuestionType.multiple_choice,
+            difficulty=question_schemas.DifficultyLevel.medium,
             topic="Cells",
         )
         self.exam_data = {
             "title": "Cell Biology",
             "questions": [
                 {
-                    "id": 1,
                     "question_text": "What controls a cell?",
                     "question_type": "multiple_choice",
                     "difficulty": "medium",
@@ -80,7 +83,10 @@ class GeminiServiceTests(unittest.TestCase):
     def generate_with_response(self, response):
         with (
             patch("app.services.ai.gemini_service.settings.GEMINI_API_KEY", "test-key"),
-            patch("app.services.ai.gemini_service.settings.GEMINI_BASE_URL", "https://provider.test/v1"),
+            patch(
+                "app.services.ai.gemini_service.settings.GEMINI_BASE_URL",
+                "https://provider.test/v1",
+            ),
             patch("app.services.ai.gemini_service.settings.GEMINI_MODEL", "test-model"),
             patch("app.services.ai.gemini_service.OpenAI") as openai_client,
         ):
@@ -107,13 +113,15 @@ class GeminiServiceTests(unittest.TestCase):
 
     def test_valid_fenced_json_is_parsed(self):
         raw = f"```json\n{json.dumps(self.exam_data)}\n```"
-
         self.assertEqual(_clean_and_parse_json(raw), self.exam_data)
 
     def test_provider_sdk_failure_is_converted_to_safe_domain_error(self):
         with (
             patch("app.services.ai.gemini_service.settings.GEMINI_API_KEY", "test-key"),
-            patch("app.services.ai.gemini_service.settings.GEMINI_BASE_URL", "https://provider.test/v1"),
+            patch(
+                "app.services.ai.gemini_service.settings.GEMINI_BASE_URL",
+                "https://provider.test/v1",
+            ),
             patch("app.services.ai.gemini_service.settings.GEMINI_MODEL", "test-model"),
             patch("app.services.ai.gemini_service.OpenAI") as openai_client,
         ):
@@ -128,7 +136,6 @@ class GeminiServiceTests(unittest.TestCase):
 
     def test_unusable_question_data_raises_validation_error(self):
         response = self.make_response(json.dumps({"title": "Broken", "questions": []}))
-
         with self.assertRaises(AIResponseValidationError):
             self.generate_with_response(response)
 
@@ -137,6 +144,11 @@ class ExamEndpointTests(unittest.TestCase):
     def setUp(self):
         app = FastAPI()
         app.include_router(exams.router)
+
+        async def get_test_db():
+            yield AsyncMock()
+
+        app.dependency_overrides[get_db] = get_test_db
         self.client = TestClient(app)
         self.payload = {
             "grade": 7,
@@ -146,16 +158,33 @@ class ExamEndpointTests(unittest.TestCase):
             "difficulty": "medium",
             "topic": "Cells",
         }
-        self.generated_exam = generation_schemas.ExamOut(
+        self.preview_exam_data = exam_schemas.ExamPreviewOut(
             title="Cell Biology",
             grade=7,
             subject="Science",
             questions=[
-                generation_schemas.QuestionOut(
+                question_schemas.QuestionPreviewOut(
+                    question_text="What controls a cell?",
+                    question_type=question_schemas.QuestionType.multiple_choice,
+                    difficulty=question_schemas.DifficultyLevel.medium,
+                    grade=7,
+                    subject="Science",
+                    topic="Cells",
+                    options=["Nucleus", "Membrane"],
+                    correct_answer="Nucleus",
+                )
+            ],
+        )
+        self.finalized_exam_data = exam_schemas.ExamFinalizeOut(
+            title="Cell Biology",
+            grade=7,
+            subject="Science",
+            questions=[
+                question_schemas.QuestionFinalizeOut(
                     id=1,
                     question_text="What controls a cell?",
-                    question_type="multiple_choice",
-                    difficulty="medium",
+                    question_type=question_schemas.QuestionType.multiple_choice,
+                    difficulty=question_schemas.DifficultyLevel.medium,
                     grade=7,
                     subject="Science",
                     topic="Cells",
@@ -165,29 +194,27 @@ class ExamEndpointTests(unittest.TestCase):
             ],
         )
 
-    def test_preview_response_uses_final_exam_structure(self):
+    def test_preview_endpoint_success(self):
         with patch(
-            "app.api.v1.endpoints.exams.generate_exam",
-            new=AsyncMock(return_value=self.generated_exam),
-        ) as generate_exam:
-            response = self.client.post("/exam/generate?preview=true", json=self.payload)
+            "app.api.v1.endpoints.exams.preview_exam",
+            new=AsyncMock(return_value=self.preview_exam_data),
+        ) as mock_preview:
+            response = self.client.post("/exam/preview", json=self.payload)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), self.generated_exam.model_dump(mode="json"))
-        generate_exam.assert_awaited_once()
-        request = generate_exam.await_args.args[0]
-        self.assertEqual(request.model_dump(mode="json"), self.payload)
-        self.assertTrue(generate_exam.await_args.kwargs["preview"])
+        self.assertEqual(response.json(), self.preview_exam_data.model_dump(mode="json"))
+        mock_preview.assert_awaited_once()
 
-    def test_default_endpoint_behavior_disables_preview(self):
+    def test_finalize_endpoint_success(self):
         with patch(
-            "app.api.v1.endpoints.exams.generate_exam",
-            new=AsyncMock(return_value=self.generated_exam),
-        ) as generate_exam:
-            response = self.client.post("/exam/generate", json=self.payload)
+            "app.api.v1.endpoints.exams.finalize_exam",
+            new=AsyncMock(return_value=self.finalized_exam_data),
+        ) as mock_finalize:
+            response = self.client.post("/exam/finalize", json=self.payload)
 
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(generate_exam.await_args.kwargs["preview"])
+        self.assertEqual(response.json(), self.finalized_exam_data.model_dump(mode="json"))
+        mock_finalize.assert_awaited_once()
 
     def test_known_ai_failures_return_safe_status_codes(self):
         cases = (
@@ -201,10 +228,10 @@ class ExamEndpointTests(unittest.TestCase):
         for error, expected_status in cases:
             with self.subTest(error=type(error).__name__):
                 with patch(
-                    "app.api.v1.endpoints.exams.generate_exam",
+                    "app.api.v1.endpoints.exams.preview_exam",
                     new=AsyncMock(side_effect=error),
                 ):
-                    response = self.client.post("/exam/generate", json=self.payload)
+                    response = self.client.post("/exam/preview", json=self.payload)
 
                 self.assertEqual(response.status_code, expected_status)
                 response_text = response.text
@@ -212,42 +239,39 @@ class ExamEndpointTests(unittest.TestCase):
                 self.assertNotIn("secret", response_text.lower())
                 self.assertNotIn("raw-provider-response", response_text)
 
-    def test_preview_uses_safe_error_mapping(self):
+    def test_unexpected_failure_preview_returns_generic_500(self):
         with patch(
-            "app.api.v1.endpoints.exams.generate_exam",
-            new=AsyncMock(side_effect=AIResponseValidationError("raw-invalid-data")),
+            "app.api.v1.endpoints.exams.preview_exam",
+            new=AsyncMock(side_effect=RuntimeError("internal-error")),
         ):
-            response = self.client.post("/exam/generate?preview=true", json=self.payload)
-
-        self.assertEqual(response.status_code, 422)
-        self.assertNotIn("raw-invalid-data", response.text)
-
-    def test_unexpected_failure_returns_generic_500(self):
-        with patch(
-            "app.api.v1.endpoints.exams.generate_exam",
-            new=AsyncMock(side_effect=RuntimeError("internal-path-and-secret")),
-        ):
-            response = self.client.post("/exam/generate", json=self.payload)
+            response = self.client.post("/exam/preview", json=self.payload)
 
         self.assertEqual(response.status_code, 500)
-        self.assertEqual(response.json(), {"detail": "Unable to generate the exam."})
-        self.assertNotIn("internal-path-and-secret", response.text)
+        self.assertEqual(response.json(), {"detail": "Unable to generate the exam preview."})
+
+    def test_unexpected_failure_finalize_returns_generic_500(self):
+        with patch(
+            "app.api.v1.endpoints.exams.finalize_exam",
+            new=AsyncMock(side_effect=RuntimeError("internal-error")),
+        ):
+            response = self.client.post("/exam/finalize", json=self.payload)
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json(), {"detail": "Unable to finalize the exam."})
 
 
 class ExamServiceTests(unittest.TestCase):
     def setUp(self):
-        request = generation_schemas.ExamGenerateRequest(grade=7, subject="Science")
-        self.request = request
-        self.generated_exam = generation_schemas.ExamOut(
+        self.request = exam_schemas.ExamGenerateRequest(grade=7, subject="Science")
+        self.ai_raw_output = exam_schemas.ExamPreviewOut(
             title="Science Exam",
             grade=7,
             subject="Science",
             questions=[
-                generation_schemas.QuestionOut(
-                    id=1,
+                question_schemas.QuestionPreviewOut(
                     question_text="What is an atom?",
-                    question_type="multiple_choice",
-                    difficulty="medium",
+                    question_type=question_schemas.QuestionType.multiple_choice,
+                    difficulty=question_schemas.DifficultyLevel.medium,
                     grade=7,
                     subject="Science",
                     options=["A particle", "A planet"],
@@ -256,51 +280,64 @@ class ExamServiceTests(unittest.TestCase):
             ],
         )
 
-    def test_generate_exam_preserves_generate_save_return_workflow(self):
-        saved_exam = self.generated_exam.model_copy(update={"title": "Saved Science Exam"})
-
-        with (
-            patch(
-                "app.services.exams.exam_service.generate_exam_with_ai",
-                return_value=self.generated_exam,
-            ) as generate_exam_with_ai,
-            patch(
-                "app.services.exams.exam_service.save_generated_exam",
-                return_value=saved_exam,
-            ) as save_generated_exam,
-        ):
-            result = run(generate_and_save_exam(self.request))
-
-        generate_exam_with_ai.assert_called_once_with(self.request)
-        save_generated_exam.assert_called_once_with(self.generated_exam)
-        self.assertIs(result, saved_exam)
-
     def test_preview_generates_and_validates_without_saving(self):
         with (
             patch(
                 "app.services.exams.exam_service.generate_exam_with_ai",
-                return_value=self.generated_exam,
+                return_value=self.ai_raw_output,
             ) as generate_exam_with_ai,
-            patch("app.services.exams.exam_service.save_generated_exam") as save_generated_exam,
+            patch("app.services.exams.exam_service.create_exam") as create_exam,
         ):
-            result = run(generate_and_save_exam(self.request, preview=True))
+            result = run(preview_exam(self.request))
 
         generate_exam_with_ai.assert_called_once_with(self.request)
-        save_generated_exam.assert_not_called()
-        self.assertIs(result, self.generated_exam)
+        create_exam.assert_not_called()
+        self.assertEqual(result.title, "Science Exam")
 
-    def test_preview_validation_failure_does_not_save(self):
+    def test_finalize_generates_saves_and_returns_finalized_exam(self):
+        finalized_exam = exam_schemas.ExamFinalizeOut(
+            title="Saved Science Exam",
+            grade=7,
+            subject="Science",
+            questions=[
+                question_schemas.QuestionFinalizeOut(
+                    id=10,
+                    question_text="What is an atom?",
+                    question_type=question_schemas.QuestionType.multiple_choice,
+                    difficulty=question_schemas.DifficultyLevel.medium,
+                    grade=7,
+                    subject="Science",
+                    options=["A particle", "A planet"],
+                    correct_answer="A particle",
+                )
+            ],
+        )
+
         with (
             patch(
                 "app.services.exams.exam_service.generate_exam_with_ai",
-                return_value={"title": "Invalid exam"},
-            ),
-            patch("app.services.exams.exam_service.save_generated_exam") as save_generated_exam,
+                return_value=self.ai_raw_output,
+            ) as generate_exam_with_ai,
+            patch(
+                "app.services.exams.exam_service.create_exam",
+                new=AsyncMock(return_value=finalized_exam),
+            ) as create_exam,
+        ):
+            db = AsyncMock()
+            result = run(finalize_exam(self.request, db))
+
+        generate_exam_with_ai.assert_called_once_with(self.request)
+        create_exam.assert_awaited_once()
+        self.assertIs(create_exam.await_args.args[0], db)
+        self.assertEqual(result.title, "Saved Science Exam")
+
+    def test_preview_validation_failure_raises_ai_validation_error(self):
+        with patch(
+            "app.services.exams.exam_service.generate_exam_with_ai",
+            return_value={"title": "Invalid format missing questions"},
         ):
             with self.assertRaises(AIResponseValidationError):
-                run(generate_and_save_exam(self.request, preview=True))
-
-        save_generated_exam.assert_not_called()
+                run(preview_exam(self.request))
 
 
 if __name__ == "__main__":

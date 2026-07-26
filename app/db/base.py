@@ -1,3 +1,5 @@
-from app.db.session import Base
+from sqlalchemy.orm import DeclarativeBase
 
-from app.models.user import Subscription, User  # noqa: F401
+
+class Base(DeclarativeBase):
+    pass

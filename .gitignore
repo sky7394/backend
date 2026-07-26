@@ -94,3 +94,9 @@ $RECYCLE.BIN/
 # Miscellaneous
 .cache/
 .python-version
+
+.env
+__pycache__/
+*.pyc
+pytest.ini.bak
+quick-edit-context.txt

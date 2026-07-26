@@ -1,15 +1,44 @@
-from app.schemas.generate import (
+from typing import Optional
+
+from pydantic import BaseModel
+
+from app.schemas.question import (
     DifficultyLevel,
-    ExamGenerateRequest,
-    ExamOut,
-    QuestionOut,
+    QuestionFinalizeOut,
+    QuestionPreviewOut,
     QuestionType,
 )
+
+
+class ExamGenerateRequest(BaseModel):
+    grade: int
+    subject: str
+    num_questions: int = 5
+    question_type: QuestionType = QuestionType.multiple_choice
+    difficulty: DifficultyLevel = DifficultyLevel.medium
+    topic: Optional[str] = None
+
+
+class ExamPreviewOut(BaseModel):
+    title: str
+    grade: int
+    subject: str
+    questions: list[QuestionPreviewOut]
+
+
+class ExamFinalizeOut(BaseModel):
+    title: str
+    grade: int
+    subject: str
+    questions: list[QuestionFinalizeOut]
+
 
 __all__ = [
     "DifficultyLevel",
     "ExamGenerateRequest",
-    "ExamOut",
-    "QuestionOut",
+    "ExamFinalizeOut",
+    "ExamPreviewOut",
+    "QuestionFinalizeOut",
+    "QuestionPreviewOut",
     "QuestionType",
 ]

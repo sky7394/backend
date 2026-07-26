@@ -1,44 +1,15 @@
-from pydantic import BaseModel
-from typing import Optional, List
-from enum import Enum
+from app.schemas.question import QuestionType, DifficultyLevel
+from app.schemas.exam import ExamGenerateRequest
 
+# اگر سایر بخش‌های پروژه (مانند تست‌های قدیمی‌تر) به کلاس‌های خروجی 
+# مثل ExamOut و QuestionOut از این فایل نیاز دارند، آن‌ها را نیز به عنوان alias تعریف می‌کنیم:
+from app.schemas.exam import ExamFinalizeOut as ExamOut
+from app.schemas.question import QuestionFinalizeOut as QuestionOut
 
-class QuestionType(str, Enum):
-    multiple_choice = "multiple_choice"
-    descriptive = "descriptive"
-    true_false = "true_false"
-
-
-class DifficultyLevel(str, Enum):
-    easy = "easy"
-    medium = "medium"
-    hard = "hard"
-
-
-class ExamGenerateRequest(BaseModel):
-    grade: int
-    subject: str
-    num_questions: int = 5
-    question_type: QuestionType = QuestionType.multiple_choice
-    difficulty: DifficultyLevel = DifficultyLevel.medium
-    topic: Optional[str] = None
-
-
-class QuestionOut(BaseModel):
-    id: int
-    question_text: str
-    question_type: str
-    difficulty: str
-    grade: int
-    subject: str
-    topic: Optional[str] = None
-    options: Optional[List[str]] = None
-    correct_answer: str
-    explanation: Optional[str] = None
-
-
-class ExamOut(BaseModel):
-    title: str
-    grade: int
-    subject: str
-    questions: List[QuestionOut]
+__all__ = [
+    "QuestionType",
+    "DifficultyLevel",
+    "ExamGenerateRequest",
+    "QuestionOut",
+    "ExamOut"
+]

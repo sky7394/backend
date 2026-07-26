@@ -1,60 +1,65 @@
-from datetime import datetime, timedelta
+from __future__ import annotations
 
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey
-from sqlalchemy.orm import relationship
+from datetime import datetime
+
+from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
 
-class User(Base):
-    __tablename__ = "users"
+class ExamModel(Base):
+    __tablename__ = "exams"
 
-    id = Column(Integer, primary_key=True, index=True)
-    mobile = Column(String(20), unique=True, index=True, nullable=False)
-    full_name = Column(String(255), nullable=True)
-    is_active = Column(Boolean, default=True)
-    is_admin = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    grade: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    questions_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
-    subscriptions = relationship("Subscription", back_populates="user")
-    payments = relationship("Payment", back_populates="user")
-
-
-class OTPCode(Base):
-    __tablename__ = "otp_codes"
-
-    id = Column(Integer, primary_key=True, index=True)
-    mobile = Column(String(20), index=True, nullable=False)
-    code = Column(String(10), nullable=False)
-    is_used = Column(Boolean, default=False)
-    expires_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-
-class Subscription(Base):
-    __tablename__ = "subscriptions"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    plan_name = Column(String(100), default="monthly")
-    is_active = Column(Boolean, default=True)
-    starts_at = Column(DateTime, default=datetime.utcnow)
-    ends_at = Column(DateTime, default=lambda: datetime.utcnow() + timedelta(days=30))
-
-    user = relationship("User", back_populates="subscriptions")
+    questions: Mapped[list[QuestionModel]] = relationship(
+        back_populates="exam",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        lazy="selectin",
+        order_by="QuestionModel.id",
+    )
 
 
-class Payment(Base):
-    __tablename__ = "payments"
+class QuestionModel(Base):
+    __tablename__ = "questions"
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    amount = Column(Integer, nullable=False)
-    provider = Column(String(50), default="zarinpal")
-    authority = Column(String(255), nullable=True)
-    ref_id = Column(String(255), nullable=True)
-    status = Column(String(50), default="pending")
-    description = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    exam_id: Mapped[int] = mapped_column(
+        ForeignKey("exams.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    question_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    difficulty: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    grade: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    topic: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    options: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    correct_answer: Mapped[str] = mapped_column(Text, nullable=False)
+    explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
 
-    user = relationship("User", back_populates="payments")
+    exam: Mapped[ExamModel] = relationship(back_populates="questions")
