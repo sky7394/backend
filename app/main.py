@@ -13,7 +13,7 @@ from app.core.config import settings
 
 app = FastAPI(
     title=settings.APP_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json" if hasattr(settings, 'API_V1_STR') else "/openapi.json"
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
 )
 
 # تنظیمات CORS (برای اتصال فرانت‌تند در آینده)
@@ -39,7 +39,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # ثبت روتر اصلی (که شامل تمام روترهای v1 از جمله auth هست)
-app.include_router(api_router, prefix="/api/v1")
+app.include_router(api_router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 def root():

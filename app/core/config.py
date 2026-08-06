@@ -7,6 +7,7 @@ load_dotenv()
 
 class Settings:
     PROJECT_NAME: str = "GapCode AI SaaS"
+    API_V1_STR: str = "/api/v1"
     ALGORITHM: str = "HS256"
 
     def __init__(self) -> None:
@@ -19,14 +20,8 @@ class Settings:
 
         self.REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
         self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-        self.OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.groq.com/openai/v1")
-        self.OPENAI_MODEL = os.getenv("OPENAI_MODEL", "llama-3.3-70b-versatile")
-        self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-        self.GEMINI_BASE_URL = os.getenv(
-            "GEMINI_BASE_URL",
-            "https://generativelanguage.googleapis.com/v1beta/openai/",
-        )
-        self.GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")
+        self.OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        self.OPENAI_MODEL = os.getenv("OPENAI_MODEL", "")
         self.SMS_PROVIDER = os.getenv("SMS_PROVIDER", "mock")
         self.SMS_API_KEY = os.getenv("SMS_API_KEY", "")
         self.SMS_SENDER = os.getenv("SMS_SENDER", "")

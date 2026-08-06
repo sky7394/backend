@@ -1,9 +1,16 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.dependencies import RoleChecker
 from app.db.session import get_db
-from app.schemas.exam import ExamFinalizeOut, ExamGenerateRequest, ExamPreviewOut
+from app.schemas.exam import (
+    ExamFinalizeOut,
+    ExamGenerateRequest,
+    ExamPreviewOut,
+)
 from app.services.ai.exceptions import (
     AIProviderCommunicationError,
     AIProviderConfigurationError,
@@ -13,11 +20,22 @@ from app.services.ai.exceptions import (
 )
 from app.services.exams.exam_service import finalize_exam, preview_exam
 
-router = APIRouter(prefix="/exam", tags=["Exam"])
+
+logger = logging.getLogger(__name__)
+
+require_exam_access = RoleChecker(["teacher", "admin"])
+
+router = APIRouter(
+    prefix="/exam",
+    tags=["Exam"],
+    dependencies=[Depends(require_exam_access)],
+)
 
 
 @router.post("/preview", response_model=ExamPreviewOut)
-async def preview_exam_endpoint(request: ExamGenerateRequest):
+async def preview_exam_endpoint(
+    request: ExamGenerateRequest,
+) -> ExamPreviewOut:
     try:
         return await preview_exam(request)
     except AIProviderConfigurationError as exc:
@@ -41,6 +59,7 @@ async def preview_exam_endpoint(request: ExamGenerateRequest):
             detail="The generated exam data is invalid.",
         ) from exc
     except Exception as exc:
+        logger.exception("Unexpected error while generating exam preview")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to generate the exam preview.",
@@ -51,7 +70,7 @@ async def preview_exam_endpoint(request: ExamGenerateRequest):
 async def finalize_exam_endpoint(
     request: ExamGenerateRequest,
     db: AsyncSession = Depends(get_db),
-):
+) -> ExamFinalizeOut:
     try:
         return await finalize_exam(request, db)
     except AIProviderConfigurationError as exc:
@@ -75,6 +94,7 @@ async def finalize_exam_endpoint(
             detail="The generated exam data is invalid.",
         ) from exc
     except Exception as exc:
+        logger.exception("Unexpected error while finalizing exam")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to finalize the exam.",

@@ -64,18 +64,13 @@ class ConfigTests(unittest.TestCase):
         config = self.load_config(BASE_ENV)
 
         self.assertEqual(config.settings.APP_NAME, "GapCode AI SaaS")
+        self.assertEqual(config.settings.API_V1_STR, "/api/v1")
         self.assertEqual(config.settings.ALGORITHM, "HS256")
         self.assertEqual(config.settings.ACCESS_TOKEN_EXPIRE_MINUTES, 43200)
         self.assertEqual(config.settings.REDIS_URL, "redis://localhost:6379/0")
         self.assertEqual(config.settings.OPENAI_API_KEY, "")
-        self.assertEqual(config.settings.OPENAI_BASE_URL, "https://api.groq.com/openai/v1")
-        self.assertEqual(config.settings.OPENAI_MODEL, "llama-3.3-70b-versatile")
-        self.assertEqual(config.settings.GEMINI_API_KEY, "")
-        self.assertEqual(
-            config.settings.GEMINI_BASE_URL,
-            "https://generativelanguage.googleapis.com/v1beta/openai/",
-        )
-        self.assertEqual(config.settings.GEMINI_MODEL, "gemini-2.0-flash-exp")
+        self.assertEqual(config.settings.OPENAI_BASE_URL, "https://api.openai.com/v1")
+        self.assertEqual(config.settings.OPENAI_MODEL, "")
         self.assertEqual(config.settings.SMS_PROVIDER, "mock")
         self.assertEqual(config.settings.SMS_API_KEY, "")
         self.assertEqual(config.settings.SMS_SENDER, "")
@@ -93,9 +88,6 @@ class ConfigTests(unittest.TestCase):
             "OPENAI_API_KEY": "openai-key",
             "OPENAI_BASE_URL": "https://example.test/openai",
             "OPENAI_MODEL": "test-openai-model",
-            "GEMINI_API_KEY": "gemini-key",
-            "GEMINI_BASE_URL": "https://example.test/gemini",
-            "GEMINI_MODEL": "test-gemini-model",
             "SMS_PROVIDER": "twilio",
             "SMS_API_KEY": "sms-key",
             "SMS_SENDER": "sender",
@@ -112,9 +104,6 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.settings.OPENAI_API_KEY, "openai-key")
         self.assertEqual(config.settings.OPENAI_BASE_URL, "https://example.test/openai")
         self.assertEqual(config.settings.OPENAI_MODEL, "test-openai-model")
-        self.assertEqual(config.settings.GEMINI_API_KEY, "gemini-key")
-        self.assertEqual(config.settings.GEMINI_BASE_URL, "https://example.test/gemini")
-        self.assertEqual(config.settings.GEMINI_MODEL, "test-gemini-model")
         self.assertEqual(config.settings.SMS_PROVIDER, "twilio")
         self.assertEqual(config.settings.SMS_API_KEY, "sms-key")
         self.assertEqual(config.settings.SMS_SENDER, "sender")

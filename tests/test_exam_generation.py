@@ -4,11 +4,9 @@ from asyncio import run
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from fastapi import HTTPException
 
 from app.api.v1.endpoints import exams
-from app.db.session import get_db
 from app.schemas import exam as exam_schemas
 from app.schemas import generate as compatibility_schemas
 from app.schemas import question as question_schemas
@@ -19,8 +17,12 @@ from app.services.ai.exceptions import (
     AIResponseParsingError,
     AIResponseValidationError,
 )
-from app.services.ai.gemini_service import _clean_and_parse_json, generate_exam
+from app.services.ai.gpt_service import _clean_and_parse_json, generate_exam
 from app.services.exams.exam_service import finalize_exam, preview_exam
+
+
+async def run_inline(function, *args):
+    return function(*args)
 
 
 class SchemaCanonicalTests(unittest.TestCase):
@@ -44,7 +46,7 @@ class SchemaCanonicalTests(unittest.TestCase):
                         self.assertIs(getattr(compatibility_schemas, name), canonical)
 
 
-class GeminiServiceTests(unittest.TestCase):
+class GPTServiceTests(unittest.TestCase):
     def setUp(self):
         self.request = exam_schemas.ExamGenerateRequest(
             grade=7,
@@ -82,13 +84,13 @@ class GeminiServiceTests(unittest.TestCase):
 
     def generate_with_response(self, response):
         with (
-            patch("app.services.ai.gemini_service.settings.GEMINI_API_KEY", "test-key"),
+            patch("app.services.ai.gpt_service.settings.OPENAI_API_KEY", "test-key"),
             patch(
-                "app.services.ai.gemini_service.settings.GEMINI_BASE_URL",
+                "app.services.ai.gpt_service.settings.OPENAI_BASE_URL",
                 "https://provider.test/v1",
             ),
-            patch("app.services.ai.gemini_service.settings.GEMINI_MODEL", "test-model"),
-            patch("app.services.ai.gemini_service.OpenAI") as openai_client,
+            patch("app.services.ai.gpt_service.settings.OPENAI_MODEL", "gpt-test-model"),
+            patch("app.services.ai.gpt_service.OpenAI") as openai_client,
         ):
             openai_client.return_value.chat.completions.create.return_value = response
             return generate_exam(self.request)
@@ -117,13 +119,13 @@ class GeminiServiceTests(unittest.TestCase):
 
     def test_provider_sdk_failure_is_converted_to_safe_domain_error(self):
         with (
-            patch("app.services.ai.gemini_service.settings.GEMINI_API_KEY", "test-key"),
+            patch("app.services.ai.gpt_service.settings.OPENAI_API_KEY", "test-key"),
             patch(
-                "app.services.ai.gemini_service.settings.GEMINI_BASE_URL",
+                "app.services.ai.gpt_service.settings.OPENAI_BASE_URL",
                 "https://provider.test/v1",
             ),
-            patch("app.services.ai.gemini_service.settings.GEMINI_MODEL", "test-model"),
-            patch("app.services.ai.gemini_service.OpenAI") as openai_client,
+            patch("app.services.ai.gpt_service.settings.OPENAI_MODEL", "gpt-test-model"),
+            patch("app.services.ai.gpt_service.OpenAI") as openai_client,
         ):
             openai_client.return_value.chat.completions.create.side_effect = RuntimeError(
                 "provider-secret-token"
@@ -139,17 +141,17 @@ class GeminiServiceTests(unittest.TestCase):
         with self.assertRaises(AIResponseValidationError):
             self.generate_with_response(response)
 
+    def test_valid_response_returns_preview_schema_without_ids(self):
+        result = self.generate_with_response(
+            self.make_response(json.dumps(self.exam_data))
+        )
+
+        self.assertIsInstance(result, exam_schemas.ExamPreviewOut)
+        self.assertNotIn("id", result.questions[0].model_dump())
+
 
 class ExamEndpointTests(unittest.TestCase):
     def setUp(self):
-        app = FastAPI()
-        app.include_router(exams.router)
-
-        async def get_test_db():
-            yield AsyncMock()
-
-        app.dependency_overrides[get_db] = get_test_db
-        self.client = TestClient(app)
         self.payload = {
             "grade": 7,
             "subject": "Science",
@@ -199,21 +201,28 @@ class ExamEndpointTests(unittest.TestCase):
             "app.api.v1.endpoints.exams.preview_exam",
             new=AsyncMock(return_value=self.preview_exam_data),
         ) as mock_preview:
-            response = self.client.post("/exam/preview", json=self.payload)
+            response = run(exams.preview_exam_endpoint(self.payload_as_request()))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), self.preview_exam_data.model_dump(mode="json"))
+        self.assertEqual(
+            response.model_dump(mode="json"),
+            self.preview_exam_data.model_dump(mode="json"),
+        )
         mock_preview.assert_awaited_once()
 
     def test_finalize_endpoint_success(self):
+        db = AsyncMock()
         with patch(
             "app.api.v1.endpoints.exams.finalize_exam",
             new=AsyncMock(return_value=self.finalized_exam_data),
         ) as mock_finalize:
-            response = self.client.post("/exam/finalize", json=self.payload)
+            response = run(
+                exams.finalize_exam_endpoint(self.payload_as_request(), db)
+            )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), self.finalized_exam_data.model_dump(mode="json"))
+        self.assertEqual(
+            response.model_dump(mode="json"),
+            self.finalized_exam_data.model_dump(mode="json"),
+        )
         mock_finalize.assert_awaited_once()
 
     def test_known_ai_failures_return_safe_status_codes(self):
@@ -231,33 +240,146 @@ class ExamEndpointTests(unittest.TestCase):
                     "app.api.v1.endpoints.exams.preview_exam",
                     new=AsyncMock(side_effect=error),
                 ):
-                    response = self.client.post("/exam/preview", json=self.payload)
+                    with self.assertRaises(HTTPException) as context:
+                        run(exams.preview_exam_endpoint(self.payload_as_request()))
 
-                self.assertEqual(response.status_code, expected_status)
-                response_text = response.text
-                self.assertNotIn(str(error), response_text)
-                self.assertNotIn("secret", response_text.lower())
-                self.assertNotIn("raw-provider-response", response_text)
+                self.assertEqual(context.exception.status_code, expected_status)
+                self.assertNotIn(str(error), context.exception.detail)
+                self.assertNotIn("secret", context.exception.detail.lower())
+                self.assertNotIn("raw-provider-response", context.exception.detail)
 
     def test_unexpected_failure_preview_returns_generic_500(self):
-        with patch(
-            "app.api.v1.endpoints.exams.preview_exam",
-            new=AsyncMock(side_effect=RuntimeError("internal-error")),
+        with (
+            patch(
+                "app.api.v1.endpoints.exams.preview_exam",
+                new=AsyncMock(side_effect=RuntimeError("internal-error")),
+            ),
+            patch("app.api.v1.endpoints.exams.logger.exception") as log_exception,
         ):
-            response = self.client.post("/exam/preview", json=self.payload)
+            with self.assertRaises(HTTPException) as context:
+                run(exams.preview_exam_endpoint(self.payload_as_request()))
 
-        self.assertEqual(response.status_code, 500)
-        self.assertEqual(response.json(), {"detail": "Unable to generate the exam preview."})
+        self.assertEqual(context.exception.status_code, 500)
+        self.assertEqual(
+            context.exception.detail,
+            "Unable to generate the exam preview.",
+        )
+        log_exception.assert_called_once_with(
+            "Unexpected error while generating exam preview"
+        )
 
     def test_unexpected_failure_finalize_returns_generic_500(self):
-        with patch(
-            "app.api.v1.endpoints.exams.finalize_exam",
-            new=AsyncMock(side_effect=RuntimeError("internal-error")),
+        with (
+            patch(
+                "app.api.v1.endpoints.exams.finalize_exam",
+                new=AsyncMock(side_effect=RuntimeError("internal-error")),
+            ),
+            patch("app.api.v1.endpoints.exams.logger.exception") as log_exception,
         ):
-            response = self.client.post("/exam/finalize", json=self.payload)
+            with self.assertRaises(HTTPException) as context:
+                run(
+                    exams.finalize_exam_endpoint(
+                        self.payload_as_request(),
+                        AsyncMock(),
+                    )
+                )
 
-        self.assertEqual(response.status_code, 500)
-        self.assertEqual(response.json(), {"detail": "Unable to finalize the exam."})
+        self.assertEqual(context.exception.status_code, 500)
+        self.assertEqual(context.exception.detail, "Unable to finalize the exam.")
+        log_exception.assert_called_once_with(
+            "Unexpected error while finalizing exam"
+        )
+
+    def test_finalize_known_failures_use_safe_http_errors(self):
+        cases = (
+            (
+                AIProviderConfigurationError("api-key-secret"),
+                503,
+                "AI exam generation is temporarily unavailable.",
+            ),
+            (
+                AIResponseParsingError("raw-provider-response"),
+                502,
+                "The AI provider returned an invalid response.",
+            ),
+            (
+                AIProviderCommunicationError("provider-secret-token"),
+                502,
+                "The AI provider could not generate an exam.",
+            ),
+            (
+                AIProviderResponseError("raw-provider-response"),
+                502,
+                "The AI provider could not generate an exam.",
+            ),
+            (
+                AIResponseValidationError("invalid-internal-data"),
+                422,
+                "The generated exam data is invalid.",
+            ),
+        )
+
+        for error, expected_status, expected_detail in cases:
+            with self.subTest(error=type(error).__name__):
+                with patch(
+                    "app.api.v1.endpoints.exams.finalize_exam",
+                    new=AsyncMock(side_effect=error),
+                ):
+                    with self.assertRaises(HTTPException) as context:
+                        run(exams.finalize_exam_endpoint(self.payload_as_request(), AsyncMock()))
+
+                self.assertEqual(context.exception.status_code, expected_status)
+                self.assertEqual(context.exception.detail, expected_detail)
+
+    def payload_as_request(self):
+        return exam_schemas.ExamGenerateRequest.model_validate(self.payload)
+
+
+class PreviewPipelineTests(unittest.TestCase):
+    def test_preview_pipeline_returns_preview_without_ids(self):
+        request = exam_schemas.ExamGenerateRequest(
+            grade=7,
+            subject="Science",
+            num_questions=1,
+        )
+        response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=json.dumps(
+                            {
+                                "title": "Science Exam",
+                                "questions": [
+                                    {
+                                        "question_text": "What is an atom?",
+                                        "options": ["A particle", "A planet"],
+                                        "correct_answer": "A particle",
+                                    }
+                                ],
+                            }
+                        )
+                    )
+                )
+            ]
+        )
+
+        with (
+            patch("app.services.ai.gpt_service.settings.OPENAI_API_KEY", "test-key"),
+            patch(
+                "app.services.ai.gpt_service.settings.OPENAI_BASE_URL",
+                "https://provider.test/v1",
+            ),
+            patch("app.services.ai.gpt_service.OpenAI") as openai_client,
+            patch(
+                "app.services.exams.exam_service.run_in_threadpool",
+                new=AsyncMock(side_effect=run_inline),
+            ),
+        ):
+            openai_client.return_value.chat.completions.create.return_value = response
+            result = run(exams.preview_exam_endpoint(request))
+
+        self.assertIsInstance(result, exam_schemas.ExamPreviewOut)
+        self.assertNotIn("id", result.questions[0].model_dump())
 
 
 class ExamServiceTests(unittest.TestCase):
@@ -286,6 +408,10 @@ class ExamServiceTests(unittest.TestCase):
                 "app.services.exams.exam_service.generate_exam_with_ai",
                 return_value=self.ai_raw_output,
             ) as generate_exam_with_ai,
+            patch(
+                "app.services.exams.exam_service.run_in_threadpool",
+                new=AsyncMock(side_effect=run_inline),
+            ),
             patch("app.services.exams.exam_service.create_exam") as create_exam,
         ):
             result = run(preview_exam(self.request))
@@ -319,6 +445,10 @@ class ExamServiceTests(unittest.TestCase):
                 return_value=self.ai_raw_output,
             ) as generate_exam_with_ai,
             patch(
+                "app.services.exams.exam_service.run_in_threadpool",
+                new=AsyncMock(side_effect=run_inline),
+            ),
+            patch(
                 "app.services.exams.exam_service.create_exam",
                 new=AsyncMock(return_value=finalized_exam),
             ) as create_exam,
@@ -335,6 +465,9 @@ class ExamServiceTests(unittest.TestCase):
         with patch(
             "app.services.exams.exam_service.generate_exam_with_ai",
             return_value={"title": "Invalid format missing questions"},
+        ), patch(
+            "app.services.exams.exam_service.run_in_threadpool",
+            new=AsyncMock(side_effect=run_inline),
         ):
             with self.assertRaises(AIResponseValidationError):
                 run(preview_exam(self.request))

@@ -1,3 +1,8 @@
+"""Database persistence for explicitly finalized exams.
+
+This module is part of the active stateless flow; previews are never stored here.
+"""
+
 from typing import Any
 
 from sqlalchemy import select
@@ -67,18 +72,14 @@ async def create_exam(db: AsyncSession, payload: object) -> ExamFinalizeOut:
 
     try:
         db.add(exam)
+        await db.flush()
+        finalized_exam = _serialize_exam(exam)
         await db.commit()
     except Exception:
         await db.rollback()
         raise
 
-    result = await db.execute(
-        select(ExamModel)
-        .where(ExamModel.id == exam.id)
-        .options(selectinload(ExamModel.questions))
-    )
-    saved_exam = result.scalar_one()
-    return _serialize_exam(saved_exam)
+    return finalized_exam
 
 
 async def get_exam_by_id(
