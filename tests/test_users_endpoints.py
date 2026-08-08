@@ -1,7 +1,7 @@
 import importlib
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, status
@@ -37,6 +37,15 @@ class FakeDb:
         self.user = user
         self.error = error
 
+    async def execute(self, *_args, **_kwargs):
+        if self.error and not isinstance(self.error, SQLAlchemyError):
+            raise self.error
+
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = self.user
+        return result
+
+    # برای سازگاری با تست‌ها یا کدهای قدیمی
     def query(self, *_args, **_kwargs):
         if self.error and not isinstance(self.error, SQLAlchemyError):
             raise self.error
@@ -53,11 +62,13 @@ class UsersEndpointTests(unittest.TestCase):
                 raise current_user_error
 
             app.dependency_overrides[users.get_current_user] = get_test_current_user
+
         elif current_user is not None:
             def get_test_current_user():
                 return current_user
 
             app.dependency_overrides[users.get_current_user] = get_test_current_user
+
         elif db is not None:
             def get_test_db():
                 yield db
