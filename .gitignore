@@ -100,3 +100,5 @@ __pycache__/
 *.pyc
 pytest.ini.bak
 quick-edit-context.txt
+
+rbac_files_dump.txt
