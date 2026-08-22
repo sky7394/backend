@@ -6,6 +6,8 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Tex
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.models.user import User  # noqa: F401
+from app.models.learning_profile import LearningProfile  # noqa: F401
 
 
 class OTPCode(Base):

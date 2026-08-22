@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel
+from app.schemas.base import DictComparableModel
 
 
 class QuestionType(str, Enum):
@@ -16,7 +18,7 @@ class DifficultyLevel(str, Enum):
     hard = "hard"
 
 
-class QuestionPreviewOut(BaseModel):
+class QuestionPreviewOut(DictComparableModel):
     question_text: str
     question_type: QuestionType
     difficulty: DifficultyLevel

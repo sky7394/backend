@@ -26,7 +26,7 @@ class UserBase(BaseModel):
     email: EmailStr
     full_name: str | None = None
     role: str
-    
+
 
 class TokenResponse(BaseModel):
     access_token: str

@@ -14,7 +14,7 @@ except ImportError as e:
 # پسورد تستی
 test_password = "123456"
 
-print(f"\n--- TESTING PASSWORD FUNCTIONS ---")
+print("\n--- TESTING PASSWORD FUNCTIONS ---")
 print(f"Original Password: {test_password}")
 
 # ۱. ساخت هش با متد پروژه
@@ -29,7 +29,7 @@ print(f"Verify Correct PW: {verify_correct} (Should be True)")
 verify_wrong = verify_password("wrongpassword", hashed_pw)
 print(f"Verify Wrong PW  : {verify_wrong} (Should be False)")
 
-print(f"----------------------------------\n")
+print("----------------------------------\n")
 
 if verify_correct is True and verify_wrong is False:
     print("[🎉] The security functions work perfectly on their own!")

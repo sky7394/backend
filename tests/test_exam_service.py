@@ -1,7 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pydantic import ValidationError
 
 from app.schemas.exam import ExamFinalizeOut, ExamGenerateRequest, ExamPreviewOut
 from app.services.ai.exceptions import AIResponseValidationError

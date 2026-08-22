@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 from typing import Optional
 
-from pydantic import BaseModel
-
+from app.schemas.base import DictComparableModel
 from app.schemas.question import (
     DifficultyLevel,
     QuestionFinalizeOut,
@@ -10,7 +11,7 @@ from app.schemas.question import (
 )
 
 
-class ExamGenerateRequest(BaseModel):
+class ExamGenerateRequest(DictComparableModel):
     grade: int
     subject: str
     num_questions: int = 5
@@ -19,14 +20,14 @@ class ExamGenerateRequest(BaseModel):
     topic: Optional[str] = None
 
 
-class ExamPreviewOut(BaseModel):
+class ExamPreviewOut(DictComparableModel):
     title: str
     grade: int
     subject: str
     questions: list[QuestionPreviewOut]
 
 
-class ExamFinalizeOut(BaseModel):
+class ExamFinalizeOut(DictComparableModel):
     title: str
     grade: int
     subject: str

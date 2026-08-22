@@ -10,7 +10,7 @@ def get_active_subscription(current_user: User, db: Session) -> Subscription:
         db.query(Subscription)
         .filter(
             Subscription.user_id == current_user.id,
-            Subscription.is_active == True,
+            Subscription.is_active.is_(True),
         )
         .order_by(Subscription.id.desc())
         .first()

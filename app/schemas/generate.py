@@ -1,14 +1,14 @@
-from app.schemas.exam import ExamGenerateRequest, ExamPreviewOut as ExamOut
-from app.schemas.question import (
-    DifficultyLevel,
-    QuestionPreviewOut as QuestionOut,
-    QuestionType,
-)
+from __future__ import annotations
+
+from app.schemas.exam import ExamFinalizeOut as ExamOut
+from app.schemas.exam import ExamGenerateRequest
+from app.schemas.question import DifficultyLevel, QuestionFinalizeOut as QuestionOut
+from app.schemas.question import QuestionType
 
 __all__ = [
     "QuestionType",
     "DifficultyLevel",
     "ExamGenerateRequest",
     "QuestionOut",
-    "ExamOut"
+    "ExamOut",
 ]
