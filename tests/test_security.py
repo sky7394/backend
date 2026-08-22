@@ -117,8 +117,26 @@ class SecurityTests(unittest.TestCase):
         self.assertIsNone(security.decode_token(token))
 
     def test_decode_token_returns_none_for_tampered_token(self):
-        token = security.create_access_token(subject="user-123", expires_delta=5)
-        tampered_token = token[:-1] + ("A" if token[-1] != "A" else "B")
+        token = security.create_access_token(
+            subject="user-123",
+            expires_delta=5,
+        )
+
+        parts = token.split(".")
+        self.assertEqual(len(parts), 3)
+
+        signature = parts[2]
+        self.assertTrue(signature)
+
+        index = len(signature) // 2
+        replacement = "A" if signature[index] != "A" else "B"
+
+        parts[2] = (
+            signature[:index]
+            + replacement
+            + signature[index + 1:]
+        )
+        tampered_token = ".".join(parts)
 
         self.assertIsNone(security.decode_token(tampered_token))
 
