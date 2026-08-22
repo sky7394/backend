@@ -27,6 +27,21 @@ _FOUR_TIMES_TERMS = (
     "چهار برابر",
 )
 
+_ORBITAL_TERMS = (
+    "orbit",
+    "orbital",
+    "مدار",
+    "سرعت مماسی",
+    "tangential velocity",
+)
+
+_INCORRECT_ORBITAL_CLAIMS = (
+    "gravity does not act",
+    "no gravity",
+    "جاذبه نقش ندارد",
+    "جاذبه نقشی ندارد",
+)
+
 
 def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
     normalized = text.casefold()
@@ -38,11 +53,11 @@ def _has_mass_distance_change(text: str) -> bool:
 
     mass_change = bool(
         re.search(
-            r"(mass|جرم).{0,80}(double|twice|دو برابر|۲ برابر)",
+            r"(mass|جرم).{0,80}(double|twice|دو\s*برابر|۲\s*برابر)",
             normalized,
         )
         or re.search(
-            r"(double|twice|دو برابر|۲ برابر).{0,80}(mass|جرم)",
+            r"(double|twice|دو\s*برابر|۲\s*برابر).{0,80}(mass|جرم)",
             normalized,
         )
     )
@@ -63,10 +78,10 @@ def _has_mass_distance_change(text: str) -> bool:
 
 def validate_scientific_content(question: QuestionPreviewOut) -> None:
     """
-    Performs conservative, deterministic checks for known scientific traps.
+    Conservative deterministic checks for known scientific traps.
 
-    Unknown or generic questions are intentionally ignored. This validator
-    must not replace a domain-aware reasoning system.
+    This validator intentionally avoids rejecting generic questions and only
+    handles a small set of high-confidence patterns.
     """
     topic = (question.topic or "").casefold()
     text = " ".join(
@@ -83,15 +98,15 @@ def validate_scientific_content(question: QuestionPreviewOut) -> None:
         _contains_any(topic, _GRAVITY_TERMS)
         or _contains_any(text, _GRAVITY_TERMS)
     )
-
     if not is_gravity_question:
         return
 
-    # F = G * m1 * m2 / r²:
-    # doubling one mass and halving distance => 2 * 4 = 8 times.
+    # If the prompt explicitly describes doubling one mass and halving distance,
+    # the correct force scaling is 8x, not 4x.
     if _has_mass_distance_change(text):
         if _contains_any(text, _FOUR_TIMES_TERMS) and not _contains_any(
-            text, _EIGHT_TIMES_TERMS
+            text,
+            _EIGHT_TIMES_TERMS,
         ):
             raise ValueError(
                 "Gravity scaling is scientifically incorrect: "
@@ -99,22 +114,11 @@ def validate_scientific_content(question: QuestionPreviewOut) -> None:
                 "by a factor of eight."
             )
 
-    # Conservative orbital wording check.
-    orbital_text = (
-        "orbit",
-        "orbital",
-        "مدار",
-        "سرعت مماسی",
-        "tangential velocity",
-    )
-    if _contains_any(text, orbital_text):
-        incorrect_fall_claims = (
-            "gravity does not act",
-            "جاذبه作用 ندارد",
-            "جاذبه نقشی ندارد",
-            "سرعت مماسی مانع اثر جاذبه",
+    # Orbital explanation guard: gravity is the centripetal force component.
+    if _contains_any(text, _ORBITAL_TERMS) and _contains_any(
+        text,
+        _INCORRECT_ORBITAL_CLAIMS,
+    ):
+        raise ValueError(
+            "Orbital explanation incorrectly denies gravity's role."
         )
-        if _contains_any(text, incorrect_fall_claims):
-            raise ValueError(
-                "Orbital explanation incorrectly denies gravity's role."
-            )
