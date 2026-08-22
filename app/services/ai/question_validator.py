@@ -1,3 +1,4 @@
+from app.services.ai.scientific_validator import validate_scientific_content
 from pydantic import ValidationError
 
 from app.schemas.exam import ExamGenerateRequest
@@ -73,6 +74,12 @@ def normalize_questions(
                 raise AIResponseValidationError("Generated question data is unusable")
         elif options:
             raise AIResponseValidationError("Generated question data is unusable")
+        try:
+            validate_scientific_content(question)
+        except ValueError as exc:
+            raise AIResponseValidationError(
+                "Generated question failed scientific validation"
+            ) from exc
 
         questions.append(question)
 
