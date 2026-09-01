@@ -1,27 +1,36 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Subscription, User
+from app.models.user import Subscription, User
 
 
-def get_active_subscription(current_user: User, db: Session) -> Subscription:
-    subscription = (
-        db.query(Subscription)
-        .filter(
+async def get_active_subscription(
+    current_user: User,
+    db: AsyncSession,
+) -> Subscription:
+    result = await db.execute(
+        select(Subscription).where(
             Subscription.user_id == current_user.id,
-            Subscription.is_active.is_(True),
+            Subscription.status == "active",
         )
-        .order_by(Subscription.id.desc())
-        .first()
     )
+    subscription = result.scalar_one_or_none()
 
-    if not subscription:
+    if subscription is None:
         raise ValueError("No active subscription found")
 
-    if subscription.ends_at < datetime.utcnow():
-        subscription.is_active = False
-        db.commit()
+    now = datetime.now(timezone.utc)
+
+    if subscription.expires_at and subscription.expires_at < now:
+        try:
+            subscription.status = "expired"
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
+
         raise ValueError("Subscription expired")
 
     return subscription

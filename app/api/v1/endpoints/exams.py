@@ -1,14 +1,23 @@
-from __future__ import annotations
-
 import logging
-from typing import Any, Type, TypeVar
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_db
-from app.schemas.exam import ExamFinalizeOut, ExamGenerateRequest, ExamPreviewOut
+from app.core.dependencies import get_current_user
+from app.db.session import get_db
+from app.models.user import User
+from app.schemas.exam import (
+    ExamAttemptCreate,
+    ExamFinalizeOut,
+    ExamGenerateRequest,
+    ExamPreviewOut,
+)
+from app.schemas.exam_attempt import (
+    ExamAttemptOut,
+    ExamResultOut,
+    ExamResultsOut,
+)
 from app.services.ai.exceptions import (
     AIProviderCommunicationError,
     AIProviderConfigurationError,
@@ -16,37 +25,30 @@ from app.services.ai.exceptions import (
     AIResponseParsingError,
     AIResponseValidationError,
 )
+from app.services.exams.attempt_service import (
+    list_student_results,
+    save_answer,
+    start_attempt,
+    submit_attempt,
+)
 from app.services.exams.exam_service import finalize_exam, preview_exam
+from app.services.exams.exam_storage import get_exam_by_id, list_exams
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/exam", tags=["Exam"])
+router = APIRouter(prefix="/exam")
 
-T = TypeVar("T")
-
+# Alias used by tests when overriding endpoint dependencies.
 require_exam_access = get_current_user
 
 
-def _coerce_result_to_model(
-    result: Any,
-    model_cls: Type[T],
-    *,
-    failure_detail: str,
-    validation_log_message: str,
-) -> T:
-    try:
-        if isinstance(result, model_cls):
-            return result
-        return model_cls.model_validate(result)
-    except (ValidationError, TypeError, ValueError):
-        logger.exception(validation_log_message)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=failure_detail,
+def map_ai_exception_to_http(exc: Exception) -> HTTPException:
+    if isinstance(exc, (AIResponseValidationError, ValueError)):
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="The generated exam data is invalid.",
         )
 
-
-def _map_ai_exception(exc: Exception) -> HTTPException:
     if isinstance(exc, AIProviderConfigurationError):
         return HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -59,48 +61,75 @@ def _map_ai_exception(exc: Exception) -> HTTPException:
             detail="The AI provider returned an invalid response.",
         )
 
-    if isinstance(exc, (AIProviderCommunicationError, AIProviderResponseError)):
+    if isinstance(
+        exc,
+        (AIProviderCommunicationError, AIProviderResponseError),
+    ):
         return HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="The AI provider could not generate an exam.",
         )
 
-    if isinstance(exc, AIResponseValidationError):
-        return HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="The generated exam data is invalid.",
-        )
-
     return HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="Unexpected exam generation error.",
+        detail="Internal server error",
     )
 
 
-@router.post("/preview", response_model=ExamPreviewOut, status_code=200)
+def _coerce_preview_result(result: Any) -> ExamPreviewOut:
+    try:
+        if isinstance(result, dict):
+            return ExamPreviewOut(**result)
+
+        return result
+    except Exception as exc:
+        logger.exception(
+            "Failed to parse internal preview result into response schema"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to generate the exam preview.",
+        ) from exc
+
+
+def _coerce_finalize_result(result: Any) -> ExamFinalizeOut:
+    try:
+        if isinstance(result, dict):
+            return ExamFinalizeOut(**result)
+
+        return result
+    except Exception as exc:
+        logger.exception(
+            "Failed to parse internal finalize result into response schema"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to finalize the exam.",
+        ) from exc
+
+
+@router.post(
+    "/preview",
+    response_model=ExamPreviewOut,
+    status_code=status.HTTP_200_OK,
+)
 async def preview_exam_endpoint(
     request: ExamGenerateRequest,
-    current_user: Any = Depends(get_current_user),
+    current_user: Any = Depends(require_exam_access),
 ) -> ExamPreviewOut:
-    _ = current_user
     try:
         result = await preview_exam(request)
-        return _coerce_result_to_model(
-            result,
-            ExamPreviewOut,
-            failure_detail="Unable to generate the exam preview.",
-            validation_log_message="Unexpected error while validating exam preview output",
-        )
+    except HTTPException:
+        raise
     except (
         AIProviderConfigurationError,
         AIProviderCommunicationError,
         AIProviderResponseError,
         AIResponseParsingError,
         AIResponseValidationError,
+        ValueError,
     ) as exc:
-        raise _map_ai_exception(exc) from exc
-    except HTTPException:
-        raise
+        raise map_ai_exception_to_http(exc) from exc
     except Exception as exc:
         logger.exception("Unexpected error while generating exam preview")
         raise HTTPException(
@@ -108,35 +137,133 @@ async def preview_exam_endpoint(
             detail="Unable to generate the exam preview.",
         ) from exc
 
+    return _coerce_preview_result(result)
 
-@router.post("/finalize", response_model=ExamFinalizeOut, status_code=200)
+
+@router.post(
+    "/finalize",
+    response_model=ExamFinalizeOut,
+    status_code=status.HTTP_200_OK,
+)
 async def finalize_exam_endpoint(
     request: ExamGenerateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: Any = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> ExamFinalizeOut:
-    _ = current_user
     try:
         result = await finalize_exam(request, db)
-        return _coerce_result_to_model(
-            result,
-            ExamFinalizeOut,
-            failure_detail="Unable to finalize the exam.",
-            validation_log_message="Unexpected error while validating exam finalize output",
-        )
+    except HTTPException:
+        raise
     except (
         AIProviderConfigurationError,
         AIProviderCommunicationError,
         AIProviderResponseError,
         AIResponseParsingError,
         AIResponseValidationError,
+        ValueError,
     ) as exc:
-        raise _map_ai_exception(exc) from exc
-    except HTTPException:
-        raise
+        raise map_ai_exception_to_http(exc) from exc
     except Exception as exc:
         logger.exception("Unexpected error while finalizing exam")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to finalize the exam.",
         ) from exc
+
+    return _coerce_finalize_result(result)
+
+
+@router.post(
+    "/{exam_id}/attempts",
+    response_model=ExamAttemptOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def start_exam_attempt_endpoint(
+    exam_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ExamAttemptOut:
+    return await start_attempt(
+        db,
+        exam_id,
+        current_user.id,
+    )
+
+
+@router.post(
+    "/{exam_id}/attempts/{attempt_id}/submit",
+    response_model=ExamResultOut,
+    status_code=status.HTTP_200_OK,
+)
+async def submit_exam_attempt_endpoint(
+    exam_id: int,
+    attempt_id: int,
+    payload: ExamAttemptCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ExamResultOut:
+    for question_id, submitted_answer in payload.answers.items():
+        await save_answer(
+            db=db,
+            attempt_id=attempt_id,
+            student_id=current_user.id,
+            question_id=question_id,
+            submitted_answer=str(submitted_answer),
+        )
+
+    return await submit_attempt(
+        db,
+        attempt_id,
+        current_user.id,
+    )
+
+
+@router.get(
+    "/results",
+    response_model=ExamResultsOut,
+    status_code=status.HTTP_200_OK,
+)
+async def list_student_results_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ExamResultsOut:
+    return await list_student_results(
+        db,
+        current_user.id,
+    )
+
+
+@router.get(
+    "/{exam_id}",
+    response_model=ExamFinalizeOut,
+    status_code=status.HTTP_200_OK,
+)
+async def get_exam_endpoint(
+    exam_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ExamFinalizeOut:
+    exam = await get_exam_by_id(db, exam_id)
+
+    if exam is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Exam not found",
+        )
+
+    return exam
+
+
+@router.get(
+    "/",
+    response_model=list[ExamFinalizeOut],
+    status_code=status.HTTP_200_OK,
+)
+async def list_exams_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[ExamFinalizeOut]:
+    return await list_exams(
+        db,
+        current_user.id,
+    )

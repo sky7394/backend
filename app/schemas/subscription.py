@@ -1,13 +1,13 @@
 from datetime import datetime
-from pydantic import BaseModel
+from uuid import UUID
+from pydantic import BaseModel, ConfigDict
 
 
 class SubscriptionResponse(BaseModel):
-    id: int
+    id: UUID
     plan_name: str
-    is_active: bool
-    starts_at: datetime
-    ends_at: datetime
+    credits: int
+    status: str
+    expires_at: datetime | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

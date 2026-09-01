@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
+
+from pydantic import BaseModel, Field
 
 from app.schemas.base import DictComparableModel
 from app.schemas.question import (
@@ -9,6 +11,10 @@ from app.schemas.question import (
     QuestionPreviewOut,
     QuestionType,
 )
+
+
+class ExamAttemptCreate(BaseModel):
+    answers: dict[int, Any] = Field(default_factory=dict)
 
 
 class ExamGenerateRequest(DictComparableModel):
@@ -36,6 +42,7 @@ class ExamFinalizeOut(DictComparableModel):
 
 __all__ = [
     "DifficultyLevel",
+    "ExamAttemptCreate",
     "ExamGenerateRequest",
     "ExamFinalizeOut",
     "ExamPreviewOut",

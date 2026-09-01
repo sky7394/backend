@@ -1,9 +1,11 @@
+# app/services/exams/exam_storage.py
 """Database persistence for explicitly finalized exams.
 
 This module is part of the active stateless flow; previews are never stored here.
 """
 
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,7 +43,11 @@ def _serialize_exam(exam: ExamModel) -> ExamFinalizeOut:
     )
 
 
-async def create_exam(db: AsyncSession, payload: object) -> ExamFinalizeOut:
+async def create_exam(
+    db: AsyncSession,
+    payload: object,
+    created_by_user_id: UUID | None = None,
+) -> ExamFinalizeOut:
     description = (
         payload.get("description")
         if isinstance(payload, dict)
@@ -54,6 +60,7 @@ async def create_exam(db: AsyncSession, payload: object) -> ExamFinalizeOut:
         subject=exam_data.subject,
         description=description,
         questions_count=len(exam_data.questions),
+        created_by_user_id=created_by_user_id,
         questions=[
             QuestionModel(
                 question_text=question.question_text,
