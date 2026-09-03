@@ -7,29 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.exam import (
-    ExamAttemptCreate,
-    ExamFinalizeOut,
-    ExamGenerateRequest,
-    ExamPreviewOut,
-)
-from app.schemas.exam_attempt import (
-    ExamAttemptOut,
-    ExamResultOut,
-    ExamResultsOut,
-)
+from app.schemas.exam import ExamFinalizeOut, ExamGenerateRequest, ExamPreviewOut
 from app.services.ai.exceptions import (
     AIProviderCommunicationError,
     AIProviderConfigurationError,
     AIProviderResponseError,
     AIResponseParsingError,
     AIResponseValidationError,
-)
-from app.services.exams.attempt_service import (
-    list_student_results,
-    save_answer,
-    start_attempt,
-    submit_attempt,
 )
 from app.services.exams.exam_service import finalize_exam, preview_exam
 from app.services.exams.exam_storage import get_exam_by_id, list_exams
@@ -171,66 +155,6 @@ async def finalize_exam_endpoint(
         ) from exc
 
     return _coerce_finalize_result(result)
-
-
-@router.post(
-    "/{exam_id}/attempts",
-    response_model=ExamAttemptOut,
-    status_code=status.HTTP_201_CREATED,
-)
-async def start_exam_attempt_endpoint(
-    exam_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> ExamAttemptOut:
-    return await start_attempt(
-        db,
-        exam_id,
-        current_user.id,
-    )
-
-
-@router.post(
-    "/{exam_id}/attempts/{attempt_id}/submit",
-    response_model=ExamResultOut,
-    status_code=status.HTTP_200_OK,
-)
-async def submit_exam_attempt_endpoint(
-    exam_id: int,
-    attempt_id: int,
-    payload: ExamAttemptCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> ExamResultOut:
-    for question_id, submitted_answer in payload.answers.items():
-        await save_answer(
-            db=db,
-            attempt_id=attempt_id,
-            student_id=current_user.id,
-            question_id=question_id,
-            submitted_answer=str(submitted_answer),
-        )
-
-    return await submit_attempt(
-        db,
-        attempt_id,
-        current_user.id,
-    )
-
-
-@router.get(
-    "/results",
-    response_model=ExamResultsOut,
-    status_code=status.HTTP_200_OK,
-)
-async def list_student_results_endpoint(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> ExamResultsOut:
-    return await list_student_results(
-        db,
-        current_user.id,
-    )
 
 
 @router.get(

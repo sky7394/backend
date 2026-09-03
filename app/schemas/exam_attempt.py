@@ -1,4 +1,3 @@
-# app/schemas/exam_attempt.py
 from __future__ import annotations
 
 from datetime import datetime
@@ -11,7 +10,23 @@ class AttemptAnswerUpsertRequest(BaseModel):
     submitted_answer: str = Field(
         ...,
         min_length=1,
-        description="The submitted answer text for the question",
+        description="The submitted answer text or option for the question",
+    )
+
+
+class BulkAttemptAnswerItem(BaseModel):
+    question_id: int
+    submitted_answer: str = Field(
+        ...,
+        min_length=1,
+        description="The submitted answer text or option",
+    )
+
+
+class ExamAttemptBulkSubmitRequest(BaseModel):
+    answers: list[BulkAttemptAnswerItem] = Field(
+        default_factory=list,
+        description="List of answers submitted for the exam attempt",
     )
 
 
@@ -42,7 +57,7 @@ class ExamAttemptOut(BaseModel):
     started_at: datetime
     submitted_at: datetime | None = None
     graded_at: datetime | None = None
-    answers: list[AttemptAnswerOut] = []
+    answers: list[AttemptAnswerOut] = Field(default_factory=list)
 
 
 class ExamResultOut(ExamAttemptOut):
@@ -52,4 +67,15 @@ class ExamResultOut(ExamAttemptOut):
 class ExamResultsOut(BaseModel):
     exam_id: int
     exam_title: str
-    attempts: list[ExamAttemptOut] = []
+    attempts: list[ExamAttemptOut] = Field(default_factory=list)
+
+
+__all__ = [
+    "AttemptAnswerOut",
+    "AttemptAnswerUpsertRequest",
+    "BulkAttemptAnswerItem",
+    "ExamAttemptBulkSubmitRequest",
+    "ExamAttemptOut",
+    "ExamResultOut",
+    "ExamResultsOut",
+]

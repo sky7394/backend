@@ -13,15 +13,16 @@ from sqlalchemy.orm import selectinload
 from app.db.models import AttemptAnswer, ExamAttempt, ExamModel, QuestionModel
 from app.schemas.exam_attempt import (
     AttemptAnswerOut,
+    ExamAttemptBulkSubmitRequest,
     ExamAttemptOut,
     ExamResultOut,
-    ExamResultsOut,
 )
 
 
 IN_PROGRESS = "in_progress"
 SUBMITTED = "submitted"
-GRADED = "graded"
+COMPLETED = "completed"
+GRADED = COMPLETED
 
 PENDING = "pending"
 CORRECT = "correct"
@@ -74,6 +75,7 @@ def answers_are_equal(
 def _answer_to_schema(answer: AttemptAnswer) -> AttemptAnswerOut:
     return AttemptAnswerOut(
         id=answer.id,
+        attempt_id=answer.attempt_id,
         question_id=answer.question_id,
         submitted_answer=answer.submitted_answer,
         grading_status=answer.grading_status,
@@ -115,6 +117,7 @@ def _result_to_schema(attempt: ExamAttempt) -> ExamResultOut:
         started_at=attempt.started_at,
         submitted_at=attempt.submitted_at,
         graded_at=attempt.graded_at,
+        exam_title=attempt.exam.title,
         answers=[
             _answer_to_schema(answer)
             for answer in sorted(attempt.answers, key=lambda item: item.question_id)
@@ -186,6 +189,55 @@ async def start_attempt(
     return _attempt_to_schema(attempt)
 
 
+async def get_attempt(
+    db: AsyncSession,
+    attempt_id: UUID,
+    student_id: UUID,
+) -> ExamAttemptOut:
+    attempt = await _get_attempt(db, attempt_id, student_id)
+    if attempt is None:
+        raise ValueError("Attempt not found")
+    return _attempt_to_schema(attempt)
+
+
+async def _upsert_answer(
+    db: AsyncSession,
+    attempt: ExamAttempt,
+    question_id: int,
+    submitted_answer: str,
+) -> AttemptAnswer:
+    question = await db.scalar(
+        select(QuestionModel).where(
+            QuestionModel.id == question_id,
+            QuestionModel.exam_id == attempt.exam_id,
+        )
+    )
+    if question is None:
+        raise ValueError("Question does not belong to this exam")
+
+    answer = next(
+        (item for item in attempt.answers if item.question_id == question_id),
+        None,
+    )
+    if answer is None:
+        answer = AttemptAnswer(
+            attempt_id=attempt.id,
+            question_id=question_id,
+            submitted_answer=submitted_answer,
+            grading_status=PENDING,
+        )
+        db.add(answer)
+        attempt.answers.append(answer)
+    else:
+        answer.submitted_answer = submitted_answer
+        answer.grading_status = PENDING
+        answer.is_correct = None
+        answer.awarded_score = None
+        answer.feedback = None
+        answer.graded_at = None
+    return answer
+
+
 async def save_answer(
     db: AsyncSession,
     attempt_id: UUID,
@@ -201,40 +253,7 @@ async def save_answer(
     if attempt.status != IN_PROGRESS:
         raise ValueError("This attempt is no longer editable")
 
-    question = await db.scalar(
-        select(QuestionModel).where(
-            QuestionModel.id == question_id,
-            QuestionModel.exam_id == attempt.exam_id,
-        )
-    )
-
-    if question is None:
-        raise ValueError("Question does not belong to this exam")
-
-    answer = next(
-        (
-            item
-            for item in attempt.answers
-            if item.question_id == question_id
-        ),
-        None,
-    )
-
-    if answer is None:
-        answer = AttemptAnswer(
-            attempt_id=attempt.id,
-            question_id=question_id,
-            submitted_answer=submitted_answer,
-            grading_status=PENDING,
-        )
-        db.add(answer)
-    else:
-        answer.submitted_answer = submitted_answer
-        answer.grading_status = PENDING
-        answer.is_correct = None
-        answer.awarded_score = None
-        answer.feedback = None
-        answer.graded_at = None
+    answer = await _upsert_answer(db, attempt, question_id, submitted_answer)
 
     try:
         await db.commit()
@@ -250,6 +269,7 @@ async def submit_attempt(
     db: AsyncSession,
     attempt_id: UUID,
     student_id: UUID,
+    bulk_data: ExamAttemptBulkSubmitRequest | None = None,
 ) -> ExamResultOut:
     attempt = await _get_attempt(db, attempt_id, student_id)
 
@@ -258,6 +278,16 @@ async def submit_attempt(
 
     if attempt.status != IN_PROGRESS:
         return _result_to_schema(attempt)
+
+    if bulk_data is not None:
+        for item in bulk_data.answers:
+            await _upsert_answer(
+                db,
+                attempt,
+                item.question_id,
+                item.submitted_answer,
+            )
+        await db.flush()
 
     questions = {
         question.id: question
@@ -296,7 +326,7 @@ async def submit_attempt(
         if is_correct:
             total_score += 1.0
 
-    attempt.status = GRADED
+    attempt.status = COMPLETED
     attempt.total_score = total_score
     attempt.max_score = max_score
     attempt.percentage = (
@@ -313,11 +343,19 @@ async def submit_attempt(
         await db.rollback()
         raise
 
-    attempt = await _get_attempt(db, attempt_id, student_id)
-    if attempt is None:
+    loaded_attempt = await _get_attempt(db, attempt_id, student_id)
+    if loaded_attempt is None:
         raise RuntimeError("Submitted attempt could not be loaded")
 
-    return _result_to_schema(attempt)
+    if loaded_attempt.status != COMPLETED:
+        loaded_attempt.status = attempt.status
+        loaded_attempt.total_score = attempt.total_score
+        loaded_attempt.max_score = attempt.max_score
+        loaded_attempt.percentage = attempt.percentage
+        loaded_attempt.submitted_at = attempt.submitted_at
+        loaded_attempt.graded_at = attempt.graded_at
+
+    return _result_to_schema(loaded_attempt)
 
 
 async def get_attempt_result(
@@ -333,15 +371,36 @@ async def get_attempt_result(
     return _result_to_schema(attempt)
 
 
+async def list_student_attempts(
+    db: AsyncSession,
+    student_id: UUID,
+) -> list[ExamAttemptOut]:
+    statement = (
+        select(ExamAttempt)
+        .where(ExamAttempt.student_id == student_id)
+        .options(
+            selectinload(ExamAttempt.answers),
+            selectinload(ExamAttempt.exam),
+        )
+        .order_by(ExamAttempt.started_at.desc())
+    )
+    result = await db.execute(statement)
+    attempts = result.scalars().unique().all()
+    return [_attempt_to_schema(attempt) for attempt in attempts]
+
+
 async def list_student_results(
     db: AsyncSession,
     student_id: UUID,
     exam_id: int | None = None,
-) -> ExamResultsOut:
+) -> list[ExamResultOut]:
     statement = (
         select(ExamAttempt)
         .where(ExamAttempt.student_id == student_id)
-        .options(selectinload(ExamAttempt.answers))
+        .options(
+            selectinload(ExamAttempt.answers),
+            selectinload(ExamAttempt.exam),
+        )
         .order_by(ExamAttempt.started_at.desc())
     )
 
@@ -351,20 +410,17 @@ async def list_student_results(
     result = await db.execute(statement)
     attempts = result.scalars().unique().all()
 
-    return ExamResultsOut(
-        results=[
-            _result_to_schema(attempt)
-            for attempt in attempts
-        ],
-        total=len(attempts),
-    )
+    return [
+        _result_to_schema(attempt)
+        for attempt in attempts
+    ]
 
 
 async def get_exam_results(
     db: AsyncSession,
     student_id: UUID,
     exam_id: int | None = None,
-) -> ExamResultsOut:
+) -> list[ExamResultOut]:
     """Backward-compatible alias for listing a student's exam results."""
     return await list_student_results(
         db=db,
