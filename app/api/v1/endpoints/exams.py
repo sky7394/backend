@@ -17,6 +17,7 @@ from app.services.ai.exceptions import (
 )
 from app.services.exams.exam_service import finalize_exam, preview_exam
 from app.services.exams.exam_storage import get_exam_by_id, list_exams
+from fastapi import Query
 
 logger = logging.getLogger(__name__)
 
@@ -186,8 +187,11 @@ async def get_exam_endpoint(
 async def list_exams_endpoint(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
 ) -> list[ExamFinalizeOut]:
     return await list_exams(
         db,
-        current_user.id,
+        skip=skip,
+        limit=limit,
     )

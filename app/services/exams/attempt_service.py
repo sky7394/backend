@@ -277,17 +277,21 @@ async def submit_attempt(
         raise ValueError("Attempt not found")
 
     if attempt.status != IN_PROGRESS:
-        return _result_to_schema(attempt)
+        raise ValueError("Attempt is already completed")
 
-    if bulk_data is not None:
-        for item in bulk_data.answers:
-            await _upsert_answer(
-                db,
-                attempt,
-                item.question_id,
-                item.submitted_answer,
-            )
-        await db.flush()
+    try:
+        if bulk_data is not None:
+            for item in bulk_data.answers:
+                await _upsert_answer(
+                    db,
+                    attempt,
+                    item.question_id,
+                    item.submitted_answer,
+                )
+            await db.flush()
+    except Exception:
+        await db.rollback()
+        raise
 
     questions = {
         question.id: question

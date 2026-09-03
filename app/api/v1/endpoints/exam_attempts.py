@@ -26,10 +26,17 @@ from app.services.exams.attempt_service import (
 router = APIRouter(prefix="/exam-attempts", tags=["Exam Attempts"])
 
 
-def _bad_request(exc: ValueError) -> HTTPException:
+def _service_error(exc: ValueError) -> HTTPException:
+    message = str(exc)
+    if message == "Attempt not found":
+        error_status = status.HTTP_404_NOT_FOUND
+    elif message == "Attempt is already completed":
+        error_status = status.HTTP_409_CONFLICT
+    else:
+        error_status = status.HTTP_400_BAD_REQUEST
     return HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=str(exc),
+        status_code=error_status,
+        detail=message,
     )
 
 
@@ -46,7 +53,7 @@ async def start_exam_attempt(
     try:
         return await start_attempt(db, exam_id, current_user.id)
     except ValueError as exc:
-        raise _bad_request(exc) from exc
+        raise _service_error(exc) from exc
 
 
 @router.put(
@@ -69,7 +76,7 @@ async def save_exam_attempt_answer(
             payload.submitted_answer,
         )
     except ValueError as exc:
-        raise _bad_request(exc) from exc
+        raise _service_error(exc) from exc
 
 
 @router.post(
@@ -90,7 +97,7 @@ async def submit_exam_attempt(
             payload,
         )
     except ValueError as exc:
-        raise _bad_request(exc) from exc
+        raise _service_error(exc) from exc
 
 
 @router.get("/{attempt_id}", response_model=ExamAttemptOut)
@@ -102,7 +109,7 @@ async def get_exam_attempt(
     try:
         return await get_attempt(db, attempt_id, current_user.id)
     except ValueError as exc:
-        raise _bad_request(exc) from exc
+        raise _service_error(exc) from exc
 
 
 @router.get("/", response_model=list[ExamAttemptOut])

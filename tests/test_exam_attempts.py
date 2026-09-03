@@ -125,6 +125,51 @@ async def test_submit_attempt_bulk_grades_answers_and_calculates_percentage():
     db.commit.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_submit_attempt_rejects_completed_attempt_without_mutation():
+    student_id = uuid4()
+    answer = SimpleNamespace(
+        id=uuid4(),
+        attempt_id=uuid4(),
+        question_id=1,
+        submitted_answer="A",
+        grading_status=attempt_service.CORRECT,
+        is_correct=True,
+        awarded_score=1.0,
+        feedback="ok",
+        graded_at=datetime.now(timezone.utc),
+    )
+    attempt = make_attempt(student_id=student_id, status=attempt_service.COMPLETED, answers=[answer])
+    attempt.total_score = 1.0
+    attempt.percentage = 50.0
+    db = make_db(make_result(attempt))
+
+    with pytest.raises(ValueError, match="Attempt is already completed"):
+        await attempt_service.submit_attempt(db, attempt.id, student_id)
+
+    assert attempt.status == attempt_service.COMPLETED
+    assert attempt.total_score == 1.0
+    assert attempt.percentage == 50.0
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_submit_attempt_rolls_back_when_question_belongs_to_another_exam():
+    student_id = uuid4()
+    attempt = make_attempt(student_id=student_id)
+    db = make_db(make_result(attempt))
+    db.scalar.return_value = None
+    payload = ExamAttemptBulkSubmitRequest(
+        answers=[{"question_id": 999, "submitted_answer": "A"}]
+    )
+
+    with pytest.raises(ValueError, match="Question does not belong to this exam"):
+        await attempt_service.submit_attempt(db, attempt.id, student_id, payload)
+
+    db.rollback.assert_awaited_once()
+    db.commit.assert_not_awaited()
+
+
 def test_exam_attempt_router_exposes_required_contract():
     routes = {
         (method, route.path)
