@@ -141,6 +141,7 @@ async def _get_attempt(
     db: AsyncSession,
     attempt_id: UUID,
     student_id: UUID | None = None,
+    for_update: bool = False,
 ) -> ExamAttempt | None:
     statement = (
         select(ExamAttempt)
@@ -153,6 +154,9 @@ async def _get_attempt(
 
     if student_id is not None:
         statement = statement.where(ExamAttempt.student_id == student_id)
+
+    if for_update:
+        statement = statement.with_for_update()
 
     result = await db.execute(statement)
     return result.scalar_one_or_none()
@@ -194,7 +198,7 @@ async def get_attempt(
     attempt_id: UUID,
     student_id: UUID,
 ) -> ExamAttemptOut:
-    attempt = await _get_attempt(db, attempt_id, student_id)
+    attempt = await _get_attempt(db, attempt_id, student_id, for_update=True)
     if attempt is None:
         raise ValueError("Attempt not found")
     return _attempt_to_schema(attempt)

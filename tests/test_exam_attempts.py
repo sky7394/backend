@@ -191,3 +191,14 @@ def test_bulk_submission_schema_validates_answer_items():
     )
     assert payload.answers[0].question_id == 1
     assert AttemptAnswerUpsertRequest(submitted_answer="A").submitted_answer == "A"
+
+@pytest.mark.asyncio
+async def test_submit_attempt_rejects_already_completed_attempt():
+    student_id = uuid4()
+    attempt = make_attempt(student_id=student_id, status=attempt_service.COMPLETED)
+    db = make_db(make_result(attempt))
+
+    with pytest.raises(ValueError, match="Attempt is already completed"):
+        await attempt_service.submit_attempt(db, attempt.id, student_id)
+
+    db.commit.assert_not_awaited()
