@@ -110,9 +110,7 @@ async def test_submit_attempt_bulk_grades_answers_and_calculates_percentage():
         db,
         attempt_id,
         student_id,
-        ExamAttemptBulkSubmitRequest(
-            answers=[{"question_id": 2, "submitted_answer": "wrong"}]
-        ),
+        ExamAttemptBulkSubmitRequest(answers=[{"question_id": 2, "submitted_answer": "wrong"}]),
     )
 
     assert isinstance(result, ExamResultOut)
@@ -139,7 +137,9 @@ async def test_submit_attempt_rejects_completed_attempt_without_mutation():
         feedback="ok",
         graded_at=datetime.now(timezone.utc),
     )
-    attempt = make_attempt(student_id=student_id, status=attempt_service.COMPLETED, answers=[answer])
+    attempt = make_attempt(
+        student_id=student_id, status=attempt_service.COMPLETED, answers=[answer]
+    )
     attempt.total_score = 1.0
     attempt.percentage = 50.0
     db = make_db(make_result(attempt))
@@ -159,9 +159,7 @@ async def test_submit_attempt_rolls_back_when_question_belongs_to_another_exam()
     attempt = make_attempt(student_id=student_id)
     db = make_db(make_result(attempt))
     db.scalar.return_value = None
-    payload = ExamAttemptBulkSubmitRequest(
-        answers=[{"question_id": 999, "submitted_answer": "A"}]
-    )
+    payload = ExamAttemptBulkSubmitRequest(answers=[{"question_id": 999, "submitted_answer": "A"}])
 
     with pytest.raises(ValueError, match="Question does not belong to this exam"):
         await attempt_service.submit_attempt(db, attempt.id, student_id, payload)
@@ -186,11 +184,10 @@ def test_exam_attempt_router_exposes_required_contract():
 
 
 def test_bulk_submission_schema_validates_answer_items():
-    payload = ExamAttemptBulkSubmitRequest(
-        answers=[{"question_id": 1, "submitted_answer": "A"}]
-    )
+    payload = ExamAttemptBulkSubmitRequest(answers=[{"question_id": 1, "submitted_answer": "A"}])
     assert payload.answers[0].question_id == 1
     assert AttemptAnswerUpsertRequest(submitted_answer="A").submitted_answer == "A"
+
 
 @pytest.mark.asyncio
 async def test_submit_attempt_rejects_already_completed_attempt():

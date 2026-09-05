@@ -19,9 +19,7 @@ def normalize_questions(
         else request.question_type
     )
     difficulty = str(
-        request.difficulty.value
-        if hasattr(request.difficulty, "value")
-        else request.difficulty
+        request.difficulty.value if hasattr(request.difficulty, "value") else request.difficulty
     )
     raw_questions = data.get("questions")
     if not isinstance(raw_questions, list) or not raw_questions:

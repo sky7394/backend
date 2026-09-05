@@ -1,5 +1,6 @@
 # app/main.py
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from fastapi import FastAPI, Request
@@ -19,33 +20,29 @@ app = FastAPI(
 # تنظیمات CORS (برای اتصال فرانت‌تند در آینده)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # در مرحله تولید محدودتر شود
+    allow_origins=["*"],  # در مرحله تولید محدودتر شود
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
 # Global exception handler برای دیباگ راحت‌تر در مرحله توسعه
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     import traceback
+
     print("=" * 80)
     print("EXCEPTION CAUGHT:")
     print(traceback.format_exc())
     print("=" * 80)
-    return JSONResponse(
-        status_code=500,
-        content={"detail": str(exc), "type": type(exc).__name__}
-    )
+    return JSONResponse(status_code=500, content={"detail": str(exc), "type": type(exc).__name__})
+
 
 # ثبت روتر اصلی (که شامل تمام روترهای v1 از جمله auth هست)
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
+
 @app.get("/")
 def root():
-    return {
-        "app": settings.APP_NAME,
-        "version": "1.0.0",
-        "status": "running",
-        "docs": "/docs"
-    }
+    return {"app": settings.APP_NAME, "version": "1.0.0", "status": "running", "docs": "/docs"}

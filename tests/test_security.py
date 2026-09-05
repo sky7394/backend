@@ -131,11 +131,7 @@ class SecurityTests(unittest.TestCase):
         index = len(signature) // 2
         replacement = "A" if signature[index] != "A" else "B"
 
-        parts[2] = (
-            signature[:index]
-            + replacement
-            + signature[index + 1:]
-        )
+        parts[2] = signature[:index] + replacement + signature[index + 1 :]
         tampered_token = ".".join(parts)
 
         self.assertIsNone(security.decode_token(tampered_token))

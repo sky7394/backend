@@ -28,9 +28,7 @@ class TestSubscriptionAPI:
         async def override_get_db():
             yield db_session
 
-        app.dependency_overrides[subscriptions.get_current_user] = (
-            override_current_user
-        )
+        app.dependency_overrides[subscriptions.get_current_user] = override_current_user
         app.dependency_overrides[subscriptions.get_db] = override_get_db
 
         return TestClient(app), user, db_session
@@ -71,9 +69,7 @@ class TestSubscriptionAPI:
 
         with patch(
             "app.api.v1.endpoints.subscriptions.get_active_subscription",
-            new=AsyncMock(
-                side_effect=ValueError("No active subscription found")
-            ),
+            new=AsyncMock(side_effect=ValueError("No active subscription found")),
         ):
             response = client.get("/subscriptions/me")
 

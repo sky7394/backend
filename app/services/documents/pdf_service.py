@@ -21,16 +21,15 @@ def create_exam_pdf(questions):
     pdf.add_font("Vazir", "", font_path)
     pdf.set_font("Vazir", size=14)
 
-    pdf.cell(0,10,"آزمون", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 10, "آزمون", new_x="LMARGIN", new_y="NEXT")
 
     pdf.ln(5)
 
-    for i,q in enumerate(questions,1):
+    for i, q in enumerate(questions, 1):
+        pdf.multi_cell(0, 10, f"{i}) {q['question']}")
 
-        pdf.multi_cell(0,10,f"{i}) {q['question']}")
-
-        for idx,opt in enumerate(q["options"],1):
-            pdf.cell(0,8,f"{idx}) {opt}", new_x="LMARGIN", new_y="NEXT")
+        for idx, opt in enumerate(q["options"], 1):
+            pdf.cell(0, 8, f"{idx}) {opt}", new_x="LMARGIN", new_y="NEXT")
 
         pdf.ln(3)
 

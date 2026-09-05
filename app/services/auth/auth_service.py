@@ -57,9 +57,7 @@ async def verify_login_otp(mobile_number: str, code: str, db: AsyncSession) -> T
 
     otp.is_used = True
 
-    result = await db.execute(
-        select(User).where(User.mobile == mobile)
-    )
+    result = await db.execute(select(User).where(User.mobile == mobile))
     user = result.scalar_one_or_none()
 
     if not user:

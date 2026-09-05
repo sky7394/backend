@@ -21,7 +21,9 @@ def get_password_hash(password: str) -> str:
         return password
 
     if len(password.encode("utf-8")) > 72:
-        raise ValueError("password cannot be longer than 72 bytes, truncate manually if necessary (e.g. my_password[:72])")
+        raise ValueError(
+            "password cannot be longer than 72 bytes, truncate manually if necessary (e.g. my_password[:72])"
+        )
 
     hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
     return hashed.decode("utf-8")

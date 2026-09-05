@@ -27,10 +27,7 @@ class ScientificExamIntegrationTests(BaseExamE2ETest):
                 "۸ برابر",
             ],
             correct_answer="۴ برابر",
-            explanation=(
-                "جرم دو برابر و فاصله نصف شده است، "
-                "پس نیرو ۴ برابر می‌شود."
-            ),
+            explanation=("جرم دو برابر و فاصله نصف شده است، پس نیرو ۴ برابر می‌شود."),
         )
 
     @staticmethod

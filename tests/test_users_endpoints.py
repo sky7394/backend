@@ -53,23 +53,28 @@ class FakeDb:
 
 
 class UsersEndpointTests(unittest.TestCase):
-    def build_client(self, *, current_user=None, current_user_error=None, db=None, raise_server_exceptions=True):
+    def build_client(
+        self, *, current_user=None, current_user_error=None, db=None, raise_server_exceptions=True
+    ):
         app = FastAPI()
         app.include_router(users.router)
 
         if current_user_error is not None:
+
             def get_test_current_user():
                 raise current_user_error
 
             app.dependency_overrides[users.get_current_user] = get_test_current_user
 
         elif current_user is not None:
+
             def get_test_current_user():
                 return current_user
 
             app.dependency_overrides[users.get_current_user] = get_test_current_user
 
         elif db is not None:
+
             def get_test_db():
                 yield db
 
@@ -92,7 +97,9 @@ class UsersEndpointTests(unittest.TestCase):
         current_user = self.make_user()
         client = self.build_client(current_user=current_user)
 
-        with patch("app.api.v1.endpoints.users.get_profile", return_value=current_user) as get_profile:
+        with patch(
+            "app.api.v1.endpoints.users.get_profile", return_value=current_user
+        ) as get_profile:
             response = client.get("/users/me", headers={"Authorization": "Bearer token"})
 
         self.assertEqual(response.status_code, 200)
@@ -135,7 +142,9 @@ class UsersEndpointTests(unittest.TestCase):
             )
         )
 
-        response = client.get("/users/me", headers={"Authorization": "Bearer token-for-missing-user"})
+        response = client.get(
+            "/users/me", headers={"Authorization": "Bearer token-for-missing-user"}
+        )
 
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["detail"], "Could not validate credentials")

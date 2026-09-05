@@ -3,8 +3,14 @@ from app.schemas.generate import ExamGenerateRequest
 
 
 def build_exam_prompt(request: ExamGenerateRequest) -> str:
-    question_type = str(request.question_type.value if hasattr(request.question_type, "value") else request.question_type)
-    difficulty = str(request.difficulty.value if hasattr(request.difficulty, "value") else request.difficulty)
+    question_type = str(
+        request.question_type.value
+        if hasattr(request.question_type, "value")
+        else request.question_type
+    )
+    difficulty = str(
+        request.difficulty.value if hasattr(request.difficulty, "value") else request.difficulty
+    )
     question_type_label = QUESTION_TYPE_LABELS.get(question_type, "چهارگزینه‌ای")
     difficulty_label = DIFFICULTY_LABELS.get(difficulty, "متوسط")
     topic = request.topic or request.subject

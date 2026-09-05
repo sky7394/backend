@@ -94,9 +94,8 @@ def validate_scientific_content(question: QuestionPreviewOut) -> None:
         if part
     )
 
-    is_gravity_question = (
-        _contains_any(topic, _GRAVITY_TERMS)
-        or _contains_any(text, _GRAVITY_TERMS)
+    is_gravity_question = _contains_any(topic, _GRAVITY_TERMS) or _contains_any(
+        text, _GRAVITY_TERMS
     )
     if not is_gravity_question:
         return
@@ -119,6 +118,4 @@ def validate_scientific_content(question: QuestionPreviewOut) -> None:
         text,
         _INCORRECT_ORBITAL_CLAIMS,
     ):
-        raise ValueError(
-            "Orbital explanation incorrectly denies gravity's role."
-        )
+        raise ValueError("Orbital explanation incorrectly denies gravity's role.")

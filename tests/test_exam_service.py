@@ -47,9 +47,7 @@ def mock_db() -> MagicMock:
 
 
 @pytest.mark.asyncio
-async def test_preview_exam_service_success(
-    sample_generate_request, mock_ai_raw_response
-):
+async def test_preview_exam_service_success(sample_generate_request, mock_ai_raw_response):
     with patch(
         "app.services.exams.exam_service.run_in_threadpool",
         new=AsyncMock(return_value=mock_ai_raw_response),
@@ -106,14 +104,16 @@ async def test_finalize_exam_service_success(
         ],
     )
 
-    with patch(
-        "app.services.exams.exam_service.run_in_threadpool",
-        new=AsyncMock(return_value=mock_ai_raw_response),
-    ), patch(
-        "app.services.exams.exam_service.create_exam",
-        new=AsyncMock(return_value=finalized_data),
-    ) as mock_create_exam:
-
+    with (
+        patch(
+            "app.services.exams.exam_service.run_in_threadpool",
+            new=AsyncMock(return_value=mock_ai_raw_response),
+        ),
+        patch(
+            "app.services.exams.exam_service.create_exam",
+            new=AsyncMock(return_value=finalized_data),
+        ) as mock_create_exam,
+    ):
         result = await exam_service.finalize_exam(sample_generate_request, mock_db)
 
     assert isinstance(result, ExamFinalizeOut)
@@ -131,12 +131,15 @@ async def test_finalize_exam_validation_failure_on_storage_output(
         "questions": [],  # Invalid fields
     }
 
-    with patch(
-        "app.services.exams.exam_service.run_in_threadpool",
-        new=AsyncMock(return_value=mock_ai_raw_response),
-    ), patch(
-        "app.services.exams.exam_service.create_exam",
-        new=AsyncMock(return_value=invalid_saved_exam),
+    with (
+        patch(
+            "app.services.exams.exam_service.run_in_threadpool",
+            new=AsyncMock(return_value=mock_ai_raw_response),
+        ),
+        patch(
+            "app.services.exams.exam_service.create_exam",
+            new=AsyncMock(return_value=invalid_saved_exam),
+        ),
     ):
         with pytest.raises(AIResponseValidationError) as exc_info:
             await exam_service.finalize_exam(sample_generate_request, mock_db)

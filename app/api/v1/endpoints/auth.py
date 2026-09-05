@@ -19,6 +19,7 @@ router = APIRouter()
 
 # ---------- REGISTER ----------
 
+
 @router.post("/register", response_model=UserBase)
 async def register_user(
     payload: UserRegister,
@@ -43,14 +44,13 @@ async def register_user(
 
 # ---------- LOGIN ----------
 
+
 @router.post("/login", response_model=TokenResponse)
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(User).where(User.email == form_data.username)
-    )
+    result = await db.execute(select(User).where(User.email == form_data.username))
     user = result.scalar_one_or_none()
 
     if not user or not verify_password(form_data.password, user.hashed_password):
@@ -71,6 +71,7 @@ async def login(
 
 # ---------- REFRESH TOKEN ----------
 
+
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(refresh_token: str):
     decoded = decode_token(refresh_token)
@@ -88,7 +89,5 @@ async def refresh_token(refresh_token: str):
 
 
 @router.get("/me", response_model=UserBase)
-async def read_users_me(
-    current_user: User = Depends(get_current_user)
-):
+async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user

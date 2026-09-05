@@ -27,9 +27,7 @@ class ExamFinalizeE2ETests(BaseExamE2ETest):
                         "Nothing",
                     ],
                     "correct_answer": "A force",
-                    "explanation": (
-                        "Gravity is the attractive force between masses."
-                    ),
+                    "explanation": ("Gravity is the attractive force between masses."),
                 }
             ],
         }

@@ -68,9 +68,7 @@ def _coerce_preview_result(result: Any) -> ExamPreviewOut:
 
         return result
     except Exception as exc:
-        logger.exception(
-            "Failed to parse internal preview result into response schema"
-        )
+        logger.exception("Failed to parse internal preview result into response schema")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to generate the exam preview.",
@@ -84,9 +82,7 @@ def _coerce_finalize_result(result: Any) -> ExamFinalizeOut:
 
         return result
     except Exception as exc:
-        logger.exception(
-            "Failed to parse internal finalize result into response schema"
-        )
+        logger.exception("Failed to parse internal finalize result into response schema")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to finalize the exam.",

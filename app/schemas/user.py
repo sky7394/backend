@@ -6,6 +6,7 @@ from pydantic import BaseModel, EmailStr, ConfigDict
 
 # ---------- Request Schemas ----------
 
+
 class UserRegister(BaseModel):
     email: EmailStr
     password: str
@@ -18,6 +19,7 @@ class UserLogin(BaseModel):
 
 
 # ---------- Response Schemas ----------
+
 
 class UserBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)

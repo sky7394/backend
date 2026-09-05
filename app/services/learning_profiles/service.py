@@ -46,9 +46,7 @@ async def upsert_profile(
 ) -> LearningProfile:
     profile = await get_profile(db, student_id)
     if profile is not None:
-        return await update_profile(
-            db, profile, LearningProfileUpdate(**data.model_dump())
-        )
+        return await update_profile(db, profile, LearningProfileUpdate(**data.model_dump()))
 
     # Race-safe: در صورت collision دو درخواست همزمان، به update برمی‌گردیم
     try:
@@ -58,9 +56,7 @@ async def upsert_profile(
         profile = await get_profile(db, student_id)
         if profile is None:
             raise
-        return await update_profile(
-            db, profile, LearningProfileUpdate(**data.model_dump())
-        )
+        return await update_profile(db, profile, LearningProfileUpdate(**data.model_dump()))
 
 
 async def delete_profile(db: AsyncSession, profile: LearningProfile) -> None:

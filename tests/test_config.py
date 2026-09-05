@@ -12,7 +12,10 @@ BASE_ENV = {
 
 class ConfigTests(unittest.TestCase):
     def load_config(self, env):
-        with patch("dotenv.load_dotenv", return_value=False), patch.dict(os.environ, env, clear=True):
+        with (
+            patch("dotenv.load_dotenv", return_value=False),
+            patch.dict(os.environ, env, clear=True),
+        ):
             import app.core.config as config
 
             return importlib.reload(config)
@@ -53,11 +56,15 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.settings.SECRET_KEY, "primary-secret")
 
     def test_missing_database_url_raises_runtime_error(self):
-        with self.assertRaisesRegex(RuntimeError, "Missing required environment variable: DATABASE_URL"):
+        with self.assertRaisesRegex(
+            RuntimeError, "Missing required environment variable: DATABASE_URL"
+        ):
             self.load_config({"JWT_SECRET": "jwt-secret"})
 
     def test_missing_jwt_secret_and_secret_key_raises_runtime_error(self):
-        with self.assertRaisesRegex(RuntimeError, "Missing required environment variable: JWT_SECRET or SECRET_KEY"):
+        with self.assertRaisesRegex(
+            RuntimeError, "Missing required environment variable: JWT_SECRET or SECRET_KEY"
+        ):
             self.load_config({"DATABASE_URL": BASE_ENV["DATABASE_URL"]})
 
     def test_defaults_are_used_for_optional_settings(self):

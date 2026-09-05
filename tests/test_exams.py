@@ -105,10 +105,7 @@ async def test_preview_exam_maps_configuration_error(
             await exams.preview_exam_endpoint(valid_request_payload)
 
     assert context.value.status_code == 503
-    assert (
-        context.value.detail
-        == "AI exam generation is temporarily unavailable."
-    )
+    assert context.value.detail == "AI exam generation is temporarily unavailable."
 
 
 @pytest.mark.asyncio
@@ -125,10 +122,7 @@ async def test_preview_exam_maps_parsing_error(
             await exams.preview_exam_endpoint(valid_request_payload)
 
     assert context.value.status_code == 502
-    assert (
-        context.value.detail
-        == "The AI provider returned an invalid response."
-    )
+    assert context.value.detail == "The AI provider returned an invalid response."
 
 
 @pytest.mark.asyncio
@@ -153,10 +147,7 @@ async def test_preview_exam_maps_communication_or_response_errors(
             await exams.preview_exam_endpoint(valid_request_payload)
 
     assert context.value.status_code == 502
-    assert (
-        context.value.detail
-        == "The AI provider could not generate an exam."
-    )
+    assert context.value.detail == "The AI provider could not generate an exam."
 
 
 @pytest.mark.asyncio
@@ -173,10 +164,7 @@ async def test_preview_exam_maps_validation_error(
             await exams.preview_exam_endpoint(valid_request_payload)
 
     assert context.value.status_code == 422
-    assert (
-        context.value.detail
-        == "The generated exam data is invalid."
-    )
+    assert context.value.detail == "The generated exam data is invalid."
 
 
 @pytest.mark.asyncio

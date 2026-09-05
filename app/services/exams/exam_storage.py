@@ -94,9 +94,7 @@ async def get_exam_by_id(
     exam_id: int,
 ) -> ExamFinalizeOut | None:
     result = await db.execute(
-        select(ExamModel)
-        .where(ExamModel.id == exam_id)
-        .options(selectinload(ExamModel.questions))
+        select(ExamModel).where(ExamModel.id == exam_id).options(selectinload(ExamModel.questions))
     )
     exam = result.scalar_one_or_none()
     return _serialize_exam(exam) if exam is not None else None

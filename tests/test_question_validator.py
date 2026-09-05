@@ -43,7 +43,6 @@ def test_valid_question_uses_request_defaults(exam_request):
     assert question.correct_answer == "Nucleus"
 
 
-
 def test_question_explicit_values_override_request_defaults(exam_request):
     data = valid_question(
         question_type="multiple_choice",
@@ -297,9 +296,7 @@ def test_incorrect_gravity_scaling_is_rejected(exam_request):
         ),
         options=["4 times", "8 times"],
         correct_answer="4 times",
-        explanation=(
-            "The gravitational force becomes 4 times greater."
-        ),
+        explanation=("The gravitational force becomes 4 times greater."),
     )
 
     with pytest.raises(AIResponseValidationError):
@@ -335,8 +332,7 @@ def test_correct_persian_gravity_scaling_is_accepted(exam_request):
 
     data = valid_question(
         question_text=(
-            "اگر جرم یکی از اجسام دو برابر و فاصله بین آن‌ها نصف شود، "
-            "نیروی گرانشی چند برابر می‌شود؟"
+            "اگر جرم یکی از اجسام دو برابر و فاصله بین آن‌ها نصف شود، نیروی گرانشی چند برابر می‌شود؟"
         ),
         options=["۴ برابر", "۸ برابر"],
         correct_answer="۸ برابر",
@@ -358,8 +354,7 @@ def test_incorrect_persian_gravity_scaling_is_rejected(exam_request):
 
     data = valid_question(
         question_text=(
-            "اگر جرم یکی از اجسام دو برابر و فاصله بین آن‌ها نصف شود، "
-            "نیروی گرانشی چند برابر می‌شود؟"
+            "اگر جرم یکی از اجسام دو برابر و فاصله بین آن‌ها نصف شود، نیروی گرانشی چند برابر می‌شود؟"
         ),
         options=["۴ برابر", "۸ برابر"],
         correct_answer="۴ برابر",
@@ -368,4 +363,3 @@ def test_incorrect_persian_gravity_scaling_is_rejected(exam_request):
 
     with pytest.raises(AIResponseValidationError):
         normalize_questions(data, exam_request)
-

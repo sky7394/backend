@@ -67,7 +67,6 @@ async def test_create_exam_storage_success(mock_db_session, sample_preview_paylo
     mock_db_session.rollback.assert_not_called()
 
 
-
 @pytest.mark.asyncio
 async def test_create_exam_storage_database_exception_rolls_back(
     mock_db_session, sample_preview_payload

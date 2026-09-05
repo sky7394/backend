@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch
 from app.api.v1.endpoints import exams
 from .exam_base_test import BaseExamE2ETest
 
+
 class ExamPreviewE2ETests(BaseExamE2ETest):
     def preview_response(self):
         return {
@@ -26,7 +27,10 @@ class ExamPreviewE2ETests(BaseExamE2ETest):
 
     def test_preview_returns_200_with_valid_response(self):
         client = self.build_client()
-        with patch("app.api.v1.endpoints.exams.preview_exam", new=AsyncMock(return_value=self.preview_response())) as mock_preview:
+        with patch(
+            "app.api.v1.endpoints.exams.preview_exam",
+            new=AsyncMock(return_value=self.preview_response()),
+        ) as mock_preview:
             response = client.post("/exam/preview", json=self.valid_payload())
 
         self.assertEqual(response.status_code, 200)
@@ -67,21 +71,31 @@ class ExamPreviewE2ETests(BaseExamE2ETest):
                 }
             ],
         }
-        with patch("app.api.v1.endpoints.exams.preview_exam", new=AsyncMock(return_value=invalid_preview_response)):
+        with patch(
+            "app.api.v1.endpoints.exams.preview_exam",
+            new=AsyncMock(return_value=invalid_preview_response),
+        ):
             response = client.post("/exam/preview", json=self.valid_payload())
         self.assertEqual(response.status_code, 500)
 
     def test_preview_maps_ai_validation_error_to_422(self):
         client = self.build_client()
-        with patch("app.api.v1.endpoints.exams.preview_exam", new=AsyncMock(side_effect=exams.AIResponseValidationError("invalid exam"))):
+        with patch(
+            "app.api.v1.endpoints.exams.preview_exam",
+            new=AsyncMock(side_effect=exams.AIResponseValidationError("invalid exam")),
+        ):
             response = client.post("/exam/preview", json=self.valid_payload())
         self.assertEqual(response.status_code, 422)
 
     def test_preview_maps_configuration_error_to_503(self):
         client = self.build_client()
-        with patch("app.api.v1.endpoints.exams.preview_exam", new=AsyncMock(side_effect=exams.AIProviderConfigurationError("Config issues"))):
+        with patch(
+            "app.api.v1.endpoints.exams.preview_exam",
+            new=AsyncMock(side_effect=exams.AIProviderConfigurationError("Config issues")),
+        ):
             response = client.post("/exam/preview", json=self.valid_payload())
         self.assertEqual(response.status_code, 503)
+
 
 if __name__ == "__main__":
     unittest.main()

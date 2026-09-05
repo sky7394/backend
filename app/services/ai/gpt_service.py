@@ -35,9 +35,7 @@ def _clean_and_parse_json(raw: str) -> dict:
         try:
             data = json.loads(match.group(1))
         except json.JSONDecodeError as nested_exc:
-            raise AIResponseParsingError(
-                "AI response contains malformed JSON"
-            ) from nested_exc
+            raise AIResponseParsingError("AI response contains malformed JSON") from nested_exc
 
     if not isinstance(data, dict):
         raise AIResponseParsingError("AI response must contain a JSON object")

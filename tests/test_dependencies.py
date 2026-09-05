@@ -32,10 +32,7 @@ def make_token(payload, secret=None):
 
 
 def test_oauth2_scheme_token_url():
-    assert (
-        dependencies.oauth2_scheme.model.flows.password.tokenUrl
-        == "/api/v1/auth/login"
-    )
+    assert dependencies.oauth2_scheme.model.flows.password.tokenUrl == "/api/v1/auth/login"
 
 
 @pytest.mark.asyncio

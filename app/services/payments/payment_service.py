@@ -50,9 +50,7 @@ async def verify_user_payment(
     authority: str,
     db: AsyncSession,
 ) -> PaymentVerifyResponse:
-    result = await db.execute(
-        select(Payment).where(Payment.authority == authority)
-    )
+    result = await db.execute(select(Payment).where(Payment.authority == authority))
     payment = result.scalar_one_or_none()
 
     if payment is None:
@@ -88,9 +86,7 @@ async def verify_user_payment(
         payment.ref_id = provider_result.get("ref_id")
 
         subscription_result = await db.execute(
-            select(Subscription).where(
-                Subscription.user_id == payment.user_id
-            )
+            select(Subscription).where(Subscription.user_id == payment.user_id)
         )
         subscription = subscription_result.scalar_one_or_none()
 
@@ -100,9 +96,7 @@ async def verify_user_payment(
                 plan_name="pro",
                 credits=50,
                 status="active",
-                expires_at=now + timedelta(
-                    days=settings.DEFAULT_SUBSCRIPTION_DAYS
-                ),
+                expires_at=now + timedelta(days=settings.DEFAULT_SUBSCRIPTION_DAYS),
             )
             db.add(subscription)
         else:

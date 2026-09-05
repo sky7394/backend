@@ -27,9 +27,7 @@ class TestPaymentAPI:
         async def override_get_db():
             yield db_session
 
-        app.dependency_overrides[payments.get_current_user] = (
-            override_current_user
-        )
+        app.dependency_overrides[payments.get_current_user] = override_current_user
         app.dependency_overrides[payments.get_db] = override_get_db
 
         return TestClient(app), user, db_session
@@ -61,9 +59,7 @@ class TestPaymentAPI:
         }
 
         create_user_payment.assert_awaited_once()
-        payload, received_user, received_db = (
-            create_user_payment.await_args.args
-        )
+        payload, received_user, received_db = create_user_payment.await_args.args
 
         assert payload.amount == 250000
         assert payload.description == "Pro subscription"
