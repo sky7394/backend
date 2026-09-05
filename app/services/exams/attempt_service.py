@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.logging import logger
 from app.db.models import AttemptAnswer, ExamAttempt, ExamModel, QuestionModel
 from app.schemas.exam_attempt import (
     AttemptAnswerOut,
@@ -17,7 +18,6 @@ from app.schemas.exam_attempt import (
     ExamAttemptOut,
     ExamResultOut,
 )
-
 
 IN_PROGRESS = "in_progress"
 SUBMITTED = "submitted"
@@ -117,7 +117,7 @@ def _result_to_schema(attempt: ExamAttempt) -> ExamResultOut:
         started_at=attempt.started_at,
         submitted_at=attempt.submitted_at,
         graded_at=attempt.graded_at,
-        exam_title=attempt.exam.title,
+        exam_title=attempt.exam.title if attempt.exam else None,
         answers=[
             _answer_to_schema(answer)
             for answer in sorted(attempt.answers, key=lambda item: item.question_id)
@@ -130,9 +130,7 @@ async def _get_exam(
     exam_id: int,
 ) -> ExamModel | None:
     result = await db.execute(
-        select(ExamModel)
-        .where(ExamModel.id == exam_id)
-        .options(selectinload(ExamModel.questions)),
+        select(ExamModel).where(ExamModel.id == exam_id).options(selectinload(ExamModel.questions)),
     )
     return result.scalar_one_or_none()
 
@@ -170,6 +168,9 @@ async def start_attempt(
     exam = await _get_exam(db, exam_id)
 
     if exam is None:
+        logger.warning(
+            "Exam attempt start failed: exam_id=%s not found | student_id=%s", exam_id, student_id
+        )
         raise ValueError("Exam not found")
 
     attempt = ExamAttempt(
@@ -182,14 +183,26 @@ async def start_attempt(
     try:
         db.add(attempt)
         await db.commit()
-    except Exception:
+    except Exception as exc:
         await db.rollback()
+        logger.error(
+            "Exam attempt creation failed for exam_id=%s student_id=%s: %s",
+            exam_id,
+            student_id,
+            exc,
+        )
         raise
 
     attempt = await _get_attempt(db, attempt.id, student_id)
     if attempt is None:
         raise RuntimeError("Attempt could not be loaded after creation")
 
+    logger.info(
+        "Exam attempt started: attempt_id=%s | exam_id=%s | student_id=%s",
+        attempt.id,
+        exam_id,
+        student_id,
+    )
     return _attempt_to_schema(attempt)
 
 
@@ -252,9 +265,18 @@ async def save_answer(
     attempt = await _get_attempt(db, attempt_id, student_id)
 
     if attempt is None:
+        logger.warning(
+            "Save answer failed: attempt_id=%s not found | student_id=%s", attempt_id, student_id
+        )
         raise ValueError("Attempt not found")
 
     if attempt.status != IN_PROGRESS:
+        logger.warning(
+            "Save answer rejected: attempt_id=%s status=%s | student_id=%s",
+            attempt_id,
+            attempt.status,
+            student_id,
+        )
         raise ValueError("This attempt is no longer editable")
 
     answer = await _upsert_answer(db, attempt, question_id, submitted_answer)
@@ -262,10 +284,19 @@ async def save_answer(
     try:
         await db.commit()
         await db.refresh(answer)
-    except Exception:
+    except Exception as exc:
         await db.rollback()
+        logger.error(
+            "Save answer error for attempt_id=%s question_id=%s: %s", attempt_id, question_id, exc
+        )
         raise
 
+    logger.debug(
+        "Answer saved: attempt_id=%s | question_id=%s | student_id=%s",
+        attempt_id,
+        question_id,
+        student_id,
+    )
     return _answer_to_schema(answer)
 
 
@@ -275,12 +306,21 @@ async def submit_attempt(
     student_id: UUID,
     bulk_data: ExamAttemptBulkSubmitRequest | None = None,
 ) -> ExamResultOut:
-    attempt = await _get_attempt(db, attempt_id, student_id)
+    attempt = await _get_attempt(db, attempt_id, student_id, for_update=True)
 
     if attempt is None:
+        logger.warning(
+            "Submit attempt failed: attempt_id=%s not found | student_id=%s", attempt_id, student_id
+        )
         raise ValueError("Attempt not found")
 
     if attempt.status != IN_PROGRESS:
+        logger.warning(
+            "Submit attempt rejected: attempt_id=%s already in status=%s | student_id=%s",
+            attempt_id,
+            attempt.status,
+            student_id,
+        )
         raise ValueError("Attempt is already completed")
 
     try:
@@ -293,14 +333,12 @@ async def submit_attempt(
                     item.submitted_answer,
                 )
             await db.flush()
-    except Exception:
+    except Exception as exc:
         await db.rollback()
+        logger.error("Bulk answer upsert failed for attempt_id=%s: %s", attempt_id, exc)
         raise
 
-    questions = {
-        question.id: question
-        for question in attempt.exam.questions
-    }
+    questions = {question.id: question for question in attempt.exam.questions}
 
     total_score = 0.0
     max_score = float(len(questions))
@@ -324,11 +362,7 @@ async def submit_attempt(
         answer.is_correct = is_correct
         answer.grading_status = CORRECT if is_correct else INCORRECT
         answer.awarded_score = 1.0 if is_correct else 0.0
-        answer.feedback = (
-            "پاسخ صحیح است."
-            if is_correct
-            else "پاسخ صحیح نیست."
-        )
+        answer.feedback = "پاسخ صحیح است." if is_correct else "پاسخ صحیح نیست."
         answer.graded_at = _now()
 
         if is_correct:
@@ -338,17 +372,16 @@ async def submit_attempt(
     attempt.total_score = total_score
     attempt.max_score = max_score
     attempt.percentage = (
-        math.floor((total_score / max_score) * 10000) / 100
-        if max_score > 0
-        else 0.0
+        math.floor((total_score / max_score) * 10000) / 100 if max_score > 0 else 0.0
     )
     attempt.submitted_at = _now()
     attempt.graded_at = _now()
 
     try:
         await db.commit()
-    except Exception:
+    except Exception as exc:
         await db.rollback()
+        logger.error("Submit attempt commit failed for attempt_id=%s: %s", attempt_id, exc)
         raise
 
     loaded_attempt = await _get_attempt(db, attempt_id, student_id)
@@ -363,6 +396,15 @@ async def submit_attempt(
         loaded_attempt.submitted_at = attempt.submitted_at
         loaded_attempt.graded_at = attempt.graded_at
 
+    logger.info(
+        "Exam attempt submitted and graded: attempt_id=%s | exam_id=%s | student_id=%s | score=%.2f/%.2f (%.2f%%)",
+        attempt.id,
+        attempt.exam_id,
+        student_id,
+        attempt.total_score,
+        attempt.max_score,
+        attempt.percentage,
+    )
     return _result_to_schema(loaded_attempt)
 
 
@@ -418,10 +460,7 @@ async def list_student_results(
     result = await db.execute(statement)
     attempts = result.scalars().unique().all()
 
-    return [
-        _result_to_schema(attempt)
-        for attempt in attempts
-    ]
+    return [_result_to_schema(attempt) for attempt in attempts]
 
 
 async def get_exam_results(
