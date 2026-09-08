@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user
@@ -15,9 +15,9 @@ from app.services.ai.exceptions import (
     AIResponseParsingError,
     AIResponseValidationError,
 )
+from app.services.documents.pdf_service import generate_exam_pdf_bytes
 from app.services.exams.exam_service import finalize_exam, preview_exam
 from app.services.exams.exam_storage import get_exam_by_id, list_exams
-from fastapi import Query
 
 logger = logging.getLogger(__name__)
 
@@ -190,4 +190,137 @@ async def list_exams_endpoint(
         db,
         skip=skip,
         limit=limit,
+    )
+
+
+@router.get(
+    "/{exam_id}/pdf",
+    response_class=Response,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "content": {"application/pdf": {}},
+            "description": "فایل PDF آزمون با موفقیت تولید و ارسال شد.",
+        },
+        404: {"description": "آزمون مورد نظر یافت نشد."},
+    },
+    summary="دانلود فایل PDF آزمون",
+    description="تولید و دریافت خروجی PDF آزمون به صورت کاملاً Stateless.",
+)
+async def download_exam_pdf_endpoint(
+    exam_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    exam = await get_exam_by_id(db, exam_id)
+
+    if exam is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Exam not found",
+        )
+
+    try:
+        # استخراج ساختار داده‌های آزمون برای سرویس PDF
+        if hasattr(exam, "model_dump"):
+            exam_data = exam.model_dump()
+        elif hasattr(exam, "dict"):
+            exam_data = exam.dict()
+        elif hasattr(exam, "to_dict"):
+            exam_data = exam.to_dict()
+        elif isinstance(exam, dict):
+            exam_data = exam
+        else:
+            # در صورتی که شیء ORM باشد، مقادیر آن را استخراج می‌کنیم
+            exam_data = {
+                "title": getattr(exam, "title", "آزمون"),
+                "questions": getattr(exam, "questions", []),
+            }
+
+        pdf_bytes = generate_exam_pdf_bytes(exam_data)
+    except Exception as exc:
+        logger.exception("Failed to generate PDF for exam_id=%s", exam_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to generate the exam PDF.",
+        ) from exc
+
+    filename = f"exam_{exam_id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )
+
+
+@router.get(
+    "/{exam_id}/docx",
+    response_class=Response,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "content": {
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {}
+            },
+            "description": "فایل Word آزمون با موفقیت تولید و ارسال شد.",
+        },
+        404: {"description": "آزمون مورد نظر یافت نشد."},
+        500: {"description": "خطا در تولید فایل Word یا نبود کتابخانه پیش‌نیاز."},
+    },
+    summary="دانلود فایل Word آزمون",
+    description="تولید و دریافت خروجی DOCX آزمون به صورت کاملاً Stateless.",
+)
+async def download_exam_docx_endpoint(
+    exam_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    exam = await get_exam_by_id(db, exam_id)
+
+    if exam is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Exam not found",
+        )
+
+    try:
+        from app.services.documents.docx_service import generate_exam_docx_bytes
+
+        if hasattr(exam, "model_dump"):
+            exam_data = exam.model_dump()
+        elif hasattr(exam, "dict"):
+            exam_data = exam.dict()
+        elif hasattr(exam, "to_dict"):
+            exam_data = exam.to_dict()
+        elif isinstance(exam, dict):
+            exam_data = exam
+        else:
+            exam_data = {
+                "title": getattr(exam, "title", "آزمون"),
+                "questions": getattr(exam, "questions", []),
+            }
+
+        docx_bytes = generate_exam_docx_bytes(exam_data)
+    except ModuleNotFoundError:
+        logger.error("python-docx package is missing.")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="DOCX generation library is missing on server.",
+        )
+    except Exception as exc:
+        logger.exception("Failed to generate DOCX for exam_id=%s", exam_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to generate the exam Word document.",
+        ) from exc
+
+    filename = f"exam_{exam_id}.docx"
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
     )
