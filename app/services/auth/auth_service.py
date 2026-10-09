@@ -67,5 +67,7 @@ async def verify_login_otp(mobile_number: str, code: str, db: AsyncSession) -> T
 
     await db.commit()
 
-    token = create_access_token(subject=user.mobile)
-    return TokenResponse(access_token=token)
+    access_token = create_access_token({"sub": str(user.id)})
+    return TokenResponse(access_token=access_token, token_type="bearer")
+
+

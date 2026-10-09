@@ -1,147 +1,163 @@
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 from app.schemas.exam import ExamFinalizeOut, ExamGenerateRequest, ExamPreviewOut
 from app.services.ai.exceptions import AIResponseValidationError
-from app.services.exams import exam_service
+from app.services.exams.exam_service import (
+    finalize_exam,
+    preview_exam,
+    validate_finalized_exam,
+    validate_preview_exam,
+)
 
 
-@pytest.fixture
-def sample_generate_request():
-    return ExamGenerateRequest(
-        grade=10,
-        subject="physics",
-        num_questions=1,
-        question_type="multiple_choice",
-        difficulty="medium",
-        topic="gravity",
-    )
-
-
-@pytest.fixture
-def mock_ai_raw_response():
+def _minimal_preview_payload(title: str = "آزمون فیزیک") -> dict:
     return {
-        "title": "Physics Exam",
+        "title": title,
         "grade": 10,
-        "subject": "physics",
-        "questions": [
-            {
-                "question_text": "What is gravity?",
-                "question_type": "multiple_choice",
-                "difficulty": "medium",
-                "grade": 10,
-                "subject": "physics",
-                "topic": "gravity",
-                "options": ["A force", "A chemical", "A particle", "Nothing"],
-                "correct_answer": "A force",
-                "explanation": "Gravity is the attractive force between masses.",
-            }
-        ],
+        "subject": "فیزیک",
+        "questions": [],
     }
 
 
-@pytest.fixture
-def mock_db() -> MagicMock:
-    return MagicMock()
+def _minimal_finalized_payload(exam_id, title: str = "آزمون فیزیک") -> dict:
+    return {
+        "exam_id": exam_id,
+        "title": title,
+        "grade": 10,
+        "subject": "فیزیک",
+        "questions": [],
+    }
 
 
-@pytest.mark.asyncio
-async def test_preview_exam_service_success(sample_generate_request, mock_ai_raw_response):
-    with patch(
-        "app.services.exams.exam_service.run_in_threadpool",
-        new=AsyncMock(return_value=mock_ai_raw_response),
-    ) as mock_thread:
-        result = await exam_service.preview_exam(sample_generate_request)
-
+def test_validate_preview_exam_success():
+    valid_data = _minimal_preview_payload("فیزیک")
+    result = validate_preview_exam(valid_data)
     assert isinstance(result, ExamPreviewOut)
-    assert result.title == "Physics Exam"
-    assert len(result.questions) == 1
-    assert result.questions[0].question_text == "What is gravity?"
-    mock_thread.assert_awaited_once_with(
-        exam_service.generate_exam_with_ai, sample_generate_request
-    )
+    assert result.title == "فیزیک"
+    assert result.grade == 10
+    assert result.subject == "فیزیک"
 
 
-@pytest.mark.asyncio
-async def test_preview_exam_validation_failure(sample_generate_request):
-    invalid_ai_response = {
-        "title": "Invalid Exam",
-        "questions": [],  # Missing fields like grade and subject
-    }
-
-    with patch(
-        "app.services.exams.exam_service.run_in_threadpool",
-        new=AsyncMock(return_value=invalid_ai_response),
-    ):
-        with pytest.raises(AIResponseValidationError) as exc_info:
-            await exam_service.preview_exam(sample_generate_request)
-
+def test_validate_preview_exam_validation_error():
+    invalid_data = {"title": 12345, "questions": "not-a-list"}
+    with pytest.raises(AIResponseValidationError) as exc_info:
+        validate_preview_exam(invalid_data)
     assert "Generated exam preview data is invalid" in str(exc_info.value)
 
 
+def test_validate_finalized_exam_success():
+    exam_id = uuid4()
+    valid_data = _minimal_finalized_payload(exam_id, "مکانیک")
+    result = validate_finalized_exam(valid_data)
+    assert isinstance(result, ExamFinalizeOut)
+    assert result.title == "مکانیک"
+    assert result.grade == 10
+    assert result.subject == "فیزیک"
+
+
+def test_validate_finalized_exam_validation_error():
+    invalid_data = {"title": None, "grade": "invalid"}
+    with pytest.raises(AIResponseValidationError) as exc_info:
+        validate_finalized_exam(invalid_data)
+    assert "Generated finalized exam data is invalid" in str(exc_info.value)
+
+
 @pytest.mark.asyncio
-async def test_finalize_exam_service_success(
-    sample_generate_request, mock_ai_raw_response, mock_db
-):
-    finalized_data = ExamFinalizeOut(
-        title="Physics Exam",
-        grade=10,
-        subject="physics",
-        questions=[
-            {
-                "id": 42,
-                "question_text": "What is gravity?",
-                "question_type": "multiple_choice",
-                "difficulty": "medium",
-                "grade": 10,
-                "subject": "physics",
-                "topic": "gravity",
-                "options": ["A force", "A chemical", "A particle", "Nothing"],
-                "correct_answer": "A force",
-                "explanation": "Gravity is the attractive force between masses.",
-            }
-        ],
+async def test_preview_exam_success():
+    request = ExamGenerateRequest(
+        topic="موتورهای درون‌سوز",
+        grade=11,
+        subject="مکانیک خودرو",
+        number_of_questions=5,
+    )
+    mock_ai_output = _minimal_preview_payload("موتورهای درون‌سوز")
+
+    with patch(
+        "app.services.exams.exam_service.run_in_threadpool",
+        new_callable=AsyncMock,
+    ) as mock_threadpool:
+        mock_threadpool.return_value = mock_ai_output
+
+        result = await preview_exam(request)
+
+        assert isinstance(result, ExamPreviewOut)
+        assert result.title == "موتورهای درون‌سوز"
+        mock_threadpool.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_finalize_exam_with_authenticated_user():
+    user_id = uuid4()
+    exam_id = uuid4()
+
+    mock_user = MagicMock()
+    mock_user.id = user_id
+
+    mock_db = AsyncMock()
+    request = ExamGenerateRequest(
+        topic="سیستم تعلیق",
+        grade=11,
+        subject="مکانیک خودرو",
+        number_of_questions=3,
     )
 
-    with (
-        patch(
-            "app.services.exams.exam_service.run_in_threadpool",
-            new=AsyncMock(return_value=mock_ai_raw_response),
-        ),
-        patch(
-            "app.services.exams.exam_service.create_exam",
-            new=AsyncMock(return_value=finalized_data),
-        ) as mock_create_exam,
-    ):
-        result = await exam_service.finalize_exam(sample_generate_request, mock_db)
+    mock_ai_output = _minimal_preview_payload("سیستم تعلیق")
+    mock_saved_exam = _minimal_finalized_payload(exam_id, "سیستم تعلیق")
 
-    assert isinstance(result, ExamFinalizeOut)
-    assert result.questions[0].id == 42
-    mock_create_exam.assert_awaited_once()
+    with patch(
+        "app.services.exams.exam_service.run_in_threadpool",
+        new_callable=AsyncMock,
+    ) as mock_threadpool, patch(
+        "app.services.exams.exam_service.create_exam",
+        new_callable=AsyncMock,
+    ) as mock_create_exam:
+        mock_threadpool.return_value = mock_ai_output
+        mock_create_exam.return_value = mock_saved_exam
+
+        result = await finalize_exam(request=request, db=mock_db, current_user=mock_user)
+
+        assert isinstance(result, ExamFinalizeOut)
+        assert result.title == "سیستم تعلیق"
+
+        mock_threadpool.assert_called_once()
+        mock_create_exam.assert_called_once()
+        _, kwargs = mock_create_exam.call_args
+        assert kwargs["created_by_user_id"] == user_id
 
 
 @pytest.mark.asyncio
-async def test_finalize_exam_validation_failure_on_storage_output(
-    sample_generate_request, mock_ai_raw_response, mock_db
-):
-    # If the database returns invalid schemas, validate_finalized_exam must raise validation error
-    invalid_saved_exam = {
-        "title": "Corrupted Saved Exam",
-        "questions": [],  # Invalid fields
-    }
+async def test_finalize_exam_without_user():
+    exam_id = uuid4()
 
-    with (
-        patch(
-            "app.services.exams.exam_service.run_in_threadpool",
-            new=AsyncMock(return_value=mock_ai_raw_response),
-        ),
-        patch(
-            "app.services.exams.exam_service.create_exam",
-            new=AsyncMock(return_value=invalid_saved_exam),
-        ),
-    ):
-        with pytest.raises(AIResponseValidationError) as exc_info:
-            await exam_service.finalize_exam(sample_generate_request, mock_db)
+    mock_db = AsyncMock()
+    request = ExamGenerateRequest(
+        topic="شاسی خودرو",
+        grade=11,
+        subject="مکانیک خودرو",
+        number_of_questions=2,
+    )
 
-    assert "Generated finalized exam data is invalid" in str(exc_info.value)
+    mock_ai_output = _minimal_preview_payload("شاسی خودرو")
+    mock_saved_exam = _minimal_finalized_payload(exam_id, "شاسی خودرو")
+
+    with patch(
+        "app.services.exams.exam_service.run_in_threadpool",
+        new_callable=AsyncMock,
+    ) as mock_threadpool, patch(
+        "app.services.exams.exam_service.create_exam",
+        new_callable=AsyncMock,
+    ) as mock_create_exam:
+        mock_threadpool.return_value = mock_ai_output
+        mock_create_exam.return_value = mock_saved_exam
+
+        result = await finalize_exam(request=request, db=mock_db, current_user=None)
+
+        assert isinstance(result, ExamFinalizeOut)
+        assert result.title == "شاسی خودرو"
+
+        mock_threadpool.assert_called_once()
+        mock_create_exam.assert_called_once()
+        _, kwargs = mock_create_exam.call_args
+        assert kwargs["created_by_user_id"] is None
