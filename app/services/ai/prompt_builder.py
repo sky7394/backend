@@ -1,5 +1,5 @@
 from app.prompts.exam_prompts import DIFFICULTY_LABELS, QUESTION_TYPE_LABELS
-from app.schemas.generate import ExamGenerateRequest
+from app.schemas.exam import ExamGenerateRequest
 
 
 def build_exam_prompt(request: ExamGenerateRequest) -> str:
@@ -24,6 +24,15 @@ def build_exam_prompt(request: ExamGenerateRequest) -> str:
 - پایه تحصیلی: {request.grade}
 - موضوع: {topic}
 
+قوانین حیاتی فرمت پاسخ:
+۱. خروجی را دقیقاً و صرفاً به صورت JSON معتبر برگردان.
+۲. آرایه "questions" باید دقیقاً حاوی {request.num_questions} سوال باشد (نه کمتر و نه بیشتر).
+۳. برای سوالات چهارگزینه‌ای: آرایه "options" باید ۴ گزینه داشته باشد و "correct_answer" باید عیناً یکی از گزینه‌های موجود در "options" باشد.
+۴. اگر نوع سوال درست/غلط است، options فقط ["درست", "غلط"] باشد و correct_answer دقیقاً یکی از همین دو باشد.
+۵. اگر نوع سوال تشریحی یا پاسخ کوتاه است، options خالی [] باشد.
+۶. همه فیلدها را پر کن.
+۷. فقط JSON برگردان، بدون توضیح اضافی.
+
 خروجی را دقیقاً به صورت JSON با ساختار زیر بده:
 
 {{
@@ -40,13 +49,8 @@ def build_exam_prompt(request: ExamGenerateRequest) -> str:
       "subject": "{request.subject}",
       "topic": "{topic}",
       "options": ["گزینه ۱", "گزینه ۲", "گزینه ۳", "گزینه ۴"],
-      "correct_answer": "گزینه صحیح",
+      "correct_answer": "گزینه ۱",
       "explanation": "توضیح پاسخ"
     }}
   ]
-}}
-
-- اگر نوع سوال درست/غلط است، options فقط ["درست", "غلط"] باشد
-- اگر نوع سوال تشریحی یا پاسخ کوتاه است، options خالی [] باشد
-- همه فیلدها را پر کن
-- فقط JSON برگردان، بدون توضیح اضافی"""
+}}"""
