@@ -132,7 +132,12 @@ async def finalize_exam_endpoint(
     current_user: Any = Depends(require_exam_access),
 ) -> ExamFinalizeOut:
     try:
-        result = await finalize_exam(request, db)
+        result = await finalize_exam(
+            request,
+            db,
+            current_user=current_user,
+        )
+
     except HTTPException:
         raise
     except (

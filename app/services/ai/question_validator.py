@@ -24,6 +24,10 @@ def normalize_questions(
     raw_questions = data.get("questions")
     if not isinstance(raw_questions, list) or not raw_questions:
         raise AIResponseValidationError("Generated question data is unusable")
+    if len(raw_questions) != request.num_questions:
+        raise AIResponseValidationError(
+            "Generated question count does not match the requested count"
+        )
 
     questions = []
 

@@ -74,6 +74,7 @@ async def test_finalize_exam_endpoint_success(
             }
         ],
     }
+    mock_user = MagicMock()
 
     with patch(
         "app.api.v1.endpoints.exams.finalize_exam",
@@ -82,12 +83,14 @@ async def test_finalize_exam_endpoint_success(
         response = await exams.finalize_exam_endpoint(
             valid_request_payload,
             mock_db,
+            current_user=mock_user,
         )
 
     assert response.model_dump(mode="json", exclude_none=True) == expected_output
     mock_finalize.assert_awaited_once_with(
         valid_request_payload,
         mock_db,
+        current_user=mock_user,
     )
 
 
