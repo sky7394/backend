@@ -129,7 +129,7 @@ async def preview_exam_endpoint(
 async def finalize_exam_endpoint(
     request: ExamGenerateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: Any = Depends(require_exam_access),
 ) -> ExamFinalizeOut:
     try:
         result = await finalize_exam(request, db)
@@ -203,6 +203,7 @@ async def list_exams_endpoint(
             "description": "فایل PDF آزمون با موفقیت تولید و ارسال شد.",
         },
         404: {"description": "آزمون مورد نظر یافت نشد."},
+        500: {"description": "خطا در تولید فایل PDF."},
     },
     summary="دانلود فایل PDF آزمون",
     description="تولید و دریافت خروجی PDF آزمون به صورت کاملاً Stateless.",
@@ -221,9 +222,11 @@ async def download_exam_pdf_endpoint(
         )
 
     try:
-        # استخراج ساختار داده‌های آزمون برای سرویس PDF
         if hasattr(exam, "model_dump"):
-            exam_data = exam.model_dump()
+            try:
+                exam_data = exam.model_dump()
+            except TypeError:
+                exam_data = exam.model_dump()
         elif hasattr(exam, "dict"):
             exam_data = exam.dict()
         elif hasattr(exam, "to_dict"):
@@ -231,7 +234,6 @@ async def download_exam_pdf_endpoint(
         elif isinstance(exam, dict):
             exam_data = exam
         else:
-            # در صورتی که شیء ORM باشد، مقادیر آن را استخراج می‌کنیم
             exam_data = {
                 "title": getattr(exam, "title", "آزمون"),
                 "questions": getattr(exam, "questions", []),
@@ -249,9 +251,7 @@ async def download_exam_pdf_endpoint(
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -289,7 +289,10 @@ async def download_exam_docx_endpoint(
         from app.services.documents.docx_service import generate_exam_docx_bytes
 
         if hasattr(exam, "model_dump"):
-            exam_data = exam.model_dump()
+            try:
+                exam_data = exam.model_dump()
+            except TypeError:
+                exam_data = exam.model_dump()
         elif hasattr(exam, "dict"):
             exam_data = exam.dict()
         elif hasattr(exam, "to_dict"):
@@ -320,7 +323,5 @@ async def download_exam_docx_endpoint(
     return Response(
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
