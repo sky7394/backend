@@ -15,7 +15,7 @@ class ExamLayoutType(str, Enum):
 
 
 class ExamHeaderConfig(BaseModel):
-    school_name: str = "آموزشگاه"
+    school_name: str = "بسمه تعالی"
     course_name: str = "آزمون کتبی"
     grade_field: Optional[str] = None
     exam_term: Optional[str] = None
@@ -25,6 +25,9 @@ class ExamHeaderConfig(BaseModel):
     header_style: ExamHeaderStyle = ExamHeaderStyle.SCHOOL
     layout_type: ExamLayoutType = ExamLayoutType.GENERAL
     logo_path: Optional[str] = None
+    student_name: Optional[str] = None
+    candidate_number: Optional[str] = None
+    class_name: Optional[str] = None
 
 
 class NormalizedQuestion(BaseModel):
@@ -36,3 +39,5 @@ class NormalizedQuestion(BaseModel):
     section: Optional[str] = None
     formula: Optional[str] = None
     image_path: Optional[str] = None
+    explanation: Optional[str] = None
+    answer_lines: int = Field(default=3, ge=0, le=20)

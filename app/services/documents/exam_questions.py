@@ -21,21 +21,29 @@ def render_questions_table(
     if not getattr(pdf, "is_unicode_font", True):
         actual_font = "Helvetica"
 
-    pdf.set_font(actual_font, size=10)
     page_width = pdf.w - pdf.l_margin - pdf.r_margin
-
     col_no = 12.0
     col_pts = 16.0
     col_q = page_width - col_no - col_pts
 
-    # Table Header
-    pdf.set_font(actual_font, style="B", size=10)
-    pdf.cell(col_no, 8, _safe_text(pdf, "ردیف"), border=1, align="C")
-    pdf.cell(col_q, 8, _safe_text(pdf, "شرح سؤال"), border=1, align="C")
-    pdf.cell(col_pts, 8, _safe_text(pdf, "بارم"), border=1, align="C")
-    pdf.ln()
+    def draw_header():
+        pdf.set_font(actual_font, style="B", size=10)
+        pdf.cell(col_pts, 8, _safe_text(pdf, "بارم"), border=1, align="C")
+        pdf.cell(col_q, 8, _safe_text(pdf, "شرح سؤال"), border=1, align="C")
+        pdf.cell(col_no, 8, _safe_text(pdf, "ردیف"), border=1, align="C")
+        pdf.ln()
+        pdf.set_font(actual_font, size=9)
 
-    pdf.set_font(actual_font, size=9)
+    # اتصال هدر به رویداد ساخت صفحه جدید در FPDF
+    original_header = getattr(pdf, "header", None)
+    def auto_table_header():
+        if original_header:
+            original_header()
+        draw_header()
+    pdf.header = auto_table_header
+
+    draw_header()
+
     for q in questions:
         q_text = f"{q.question_text}"
         if q.options:
@@ -46,20 +54,57 @@ def render_questions_table(
 
         safe_q = _safe_text(pdf, q_text)
         pts_str = str(q.points) if q.points is not None else ""
-        
-        # محاسبه ارتفاع تقریبی
-        line_count = max(1, safe_q.count("\n") + 1)
-        row_height = max(8.0, line_count * 5.0)
 
-        x_start = pdf.get_x()
+        # رندر ردیف به نحوی که در شکست‌های چند صفحه‌ای هدر در بالای هر صفحه قرار گیرد
         y_start = pdf.get_y()
+        x_start = pdf.l_margin
 
-        pdf.cell(col_no, row_height, str(q.number), border=1, align="C")
-        pdf.set_xy(x_start + col_no, y_start)
-        pdf.multi_cell(col_q, 5, safe_q, border=1, align="R")
+        # سلول بارم (سمت چپ)
+        pdf.cell(col_pts, 8, pts_str, border=1, align="C")
+
+        # شرح سؤال (وسط)
+        pdf.set_xy(x_start + col_pts, y_start)
+        pdf.multi_cell(col_q, 6, safe_q, border=1, align="R")
         end_y = pdf.get_y()
-        actual_h = max(row_height, end_y - y_start)
 
-        pdf.set_xy(x_start + col_no + col_q, y_start)
-        pdf.cell(col_pts, actual_h, pts_str, border=1, align="C")
-        pdf.set_xy(x_start, max(end_y, y_start + actual_h))
+        # ردیف (سمت راست فیزیکی در RTL)
+        actual_h = max(8.0, end_y - y_start)
+        pdf.set_xy(x_start + col_pts + col_q, y_start)
+        pdf.cell(col_no, actual_h, str(q.number), border=1, align="C")
+        pdf.set_xy(x_start, end_y)
+
+    # پاکسازی رویداد هدر پس از اتمام جدول
+    pdf.header = original_header or (lambda: None)
+
+
+def render_answer_sheet(pdf: FPDF, questions: List[NormalizedQuestion], font_name: str = "Vazirmatn") -> None:
+    actual_font = getattr(pdf, "font_name", font_name)
+    if not getattr(pdf, "is_unicode_font", True):
+        actual_font = "Helvetica"
+
+    # غیرفعال کردن هدر جدول در صفحه پاسخنامه
+    pdf.header = lambda: None
+    pdf.add_page()
+    pdf.set_font(actual_font, style="B", size=12)
+
+    from fpdf.enums import XPos, YPos
+    pdf.cell(
+        pdf.epw,
+        10,
+        _safe_text(pdf, "ANSWER_SECRET - کلید و پاسخ‌نامه تشریحی آزمون"),
+        align="C",
+        new_x=XPos.LMARGIN,
+        new_y=YPos.NEXT,
+    )
+    pdf.ln(5)
+
+    pdf.set_font(actual_font, size=10)
+    for q in questions:
+        ans_text = f"سؤال {q.number}: {q.answer or 'بدون پاسخ ثبت‌شده'}"
+        pdf.cell(
+            pdf.epw,
+            8,
+            _safe_text(pdf, ans_text),
+            new_x=XPos.LMARGIN,
+            new_y=YPos.NEXT,
+        )
