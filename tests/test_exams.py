@@ -215,6 +215,7 @@ async def test_download_exam_pdf_endpoint_success(mock_db: MagicMock):
     ) as mock_gen_pdf:
         response = await exams.download_exam_pdf_endpoint(
             exam_id=1,
+            include_answers=True,
             db=mock_db,
             current_user=MagicMock(),
         )
@@ -222,11 +223,11 @@ async def test_download_exam_pdf_endpoint_success(mock_db: MagicMock):
     assert isinstance(response, Response)
     assert response.status_code == 200
     assert response.media_type == "application/pdf"
-    assert response.headers["content-disposition"] == 'attachment; filename="exam_1.pdf"'
+    assert response.headers["content-disposition"].startswith('attachment; filename="exam_1.pdf"')
     assert response.body == fake_pdf_bytes
 
     mock_get_exam.assert_awaited_once_with(mock_db, 1)
-    mock_gen_pdf.assert_called_once_with(fake_exam)
+    mock_gen_pdf.assert_called_once_with(fake_exam, include_answers=True)
 
 
 @pytest.mark.asyncio
@@ -288,11 +289,12 @@ async def test_download_exam_docx_endpoint_success(mock_db: MagicMock):
         new_callable=AsyncMock,
         return_value=fake_exam,
     ) as mock_get_exam, patch(
-        "app.services.documents.docx_service.generate_exam_docx_bytes",
+        "app.api.v1.endpoints.exams.generate_exam_docx_bytes",
         return_value=fake_docx_bytes,
     ) as mock_gen_docx:
         response = await exams.download_exam_docx_endpoint(
             exam_id=1,
+            include_answers=True,
             db=mock_db,
             current_user=MagicMock(),
         )
@@ -307,7 +309,7 @@ async def test_download_exam_docx_endpoint_success(mock_db: MagicMock):
     assert response.body == fake_docx_bytes
 
     mock_get_exam.assert_awaited_once_with(mock_db, 1)
-    mock_gen_docx.assert_called_once_with(fake_exam)
+    mock_gen_docx.assert_called_once_with(fake_exam, include_answers=True)
 
 
 @pytest.mark.asyncio
@@ -337,7 +339,7 @@ async def test_download_exam_docx_endpoint_generation_error(mock_db: MagicMock):
         new_callable=AsyncMock,
         return_value=fake_exam,
     ), patch(
-        "app.services.documents.docx_service.generate_exam_docx_bytes",
+        "app.api.v1.endpoints.exams.generate_exam_docx_bytes",
         side_effect=RuntimeError("DOCX engine failure"),
     ):
         with pytest.raises(HTTPException) as context:

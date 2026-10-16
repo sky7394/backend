@@ -46,3 +46,14 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 @app.get("/")
 def root():
     return {"app": settings.APP_NAME, "version": "1.0.0", "status": "running", "docs": "/docs"}
+
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    print("====== 422 VALIDATION ERROR DETAILS ======")
+    print("Body:", exc.body)
+    print("Errors:", exc.errors())
+    print("==========================================")
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})

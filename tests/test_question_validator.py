@@ -363,3 +363,15 @@ def test_incorrect_persian_gravity_scaling_is_rejected(exam_request):
 
     with pytest.raises(AIResponseValidationError):
         normalize_questions(data, exam_request)
+
+
+def test_empty_or_whitespace_explanation_is_normalized_to_none(exam_request):
+    data = valid_question(explanation="   ")
+    questions = normalize_questions(data, exam_request)
+    assert questions[0].explanation is None
+
+
+def test_whitespace_in_topic_is_stripped(exam_request):
+    data = valid_question(topic="  Cell Division  ")
+    questions = normalize_questions(data, exam_request)
+    assert questions[0].topic == "Cell Division"

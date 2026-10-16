@@ -282,7 +282,7 @@ async def test_list_exams(db):
 async def test_pdf_not_found(db):
     with patch(f"{MODULE}.get_exam_by_id", new=AsyncMock(return_value=None)):
         with pytest.raises(HTTPException) as caught:
-            await exams.download_exam_pdf_endpoint(404, db)
+            await exams.download_exam_pdf_endpoint(404, include_answers=True, db=db)
 
     assert caught.value.status_code == 404
     assert caught.value.detail == "Exam not found"
@@ -313,13 +313,13 @@ async def test_pdf_success_for_all_exam_shapes(db, exam_obj, expected):
         patch(f"{MODULE}.get_exam_by_id", new=AsyncMock(return_value=exam_obj)),
         patch(f"{MODULE}.generate_exam_pdf_bytes", return_value=pdf_bytes) as generate,
     ):
-        response = await exams.download_exam_pdf_endpoint(12, db)
+        response = await exams.download_exam_pdf_endpoint(12, include_answers=True, db=db)
 
     assert response.status_code == 200
     assert response.body == pdf_bytes
     assert response.media_type == "application/pdf"
-    assert response.headers["content-disposition"] == 'attachment; filename="exam_12.pdf"'
-    generate.assert_called_once_with(expected)
+    assert response.headers["content-disposition"].startswith('attachment; filename="exam_12.pdf"')
+    generate.assert_called_once_with(expected, include_answers=True)
 
 
 @pytest.mark.asyncio
@@ -329,7 +329,7 @@ async def test_pdf_generation_error_returns_500(db):
         patch(f"{MODULE}.generate_exam_pdf_bytes", side_effect=RuntimeError("PDF failed")),
     ):
         with pytest.raises(HTTPException) as caught:
-            await exams.download_exam_pdf_endpoint(3, db)
+            await exams.download_exam_pdf_endpoint(3, include_answers=True, db=db)
 
     assert caught.value.status_code == 500
     assert caught.value.detail == "Unable to generate the exam PDF."
@@ -339,7 +339,7 @@ async def test_pdf_generation_error_returns_500(db):
 async def test_docx_not_found(db):
     with patch(f"{MODULE}.get_exam_by_id", new=AsyncMock(return_value=None)):
         with pytest.raises(HTTPException) as caught:
-            await exams.download_exam_docx_endpoint(404, db)
+            await exams.download_exam_docx_endpoint(404, include_answers=True, db=db)
 
     assert caught.value.status_code == 404
     assert caught.value.detail == "Exam not found"
@@ -368,15 +368,15 @@ async def test_docx_success_for_all_exam_shapes(db, exam_obj, expected):
 
     with (
         patch(f"{MODULE}.get_exam_by_id", new=AsyncMock(return_value=exam_obj)),
-        patch("app.services.documents.docx_service.generate_exam_docx_bytes", return_value=docx_bytes) as generate,
+        patch(f"{MODULE}.generate_exam_docx_bytes", return_value=docx_bytes) as generate,
     ):
-        response = await exams.download_exam_docx_endpoint(18, db)
+        response = await exams.download_exam_docx_endpoint(18, include_answers=True, db=db)
 
     assert response.status_code == 200
     assert response.body == docx_bytes
     assert response.media_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    assert response.headers["content-disposition"] == 'attachment; filename="exam_18.docx"'
-    generate.assert_called_once_with(expected)
+    assert response.headers["content-disposition"].startswith('attachment; filename="exam_18.docx"')
+    generate.assert_called_once_with(expected, include_answers=True)
 
 
 @pytest.mark.asyncio
@@ -385,10 +385,10 @@ async def test_docx_missing_library_returns_500(db):
 
     with (
         patch(f"{MODULE}.get_exam_by_id", new=AsyncMock(return_value=exam_data)),
-        patch("app.services.documents.docx_service.generate_exam_docx_bytes", side_effect=ModuleNotFoundError("python-docx")),
+        patch(f"{MODULE}.generate_exam_docx_bytes", side_effect=ModuleNotFoundError("python-docx")),
     ):
         with pytest.raises(HTTPException) as caught:
-            await exams.download_exam_docx_endpoint(5, db)
+            await exams.download_exam_docx_endpoint(5, include_answers=True, db=db)
 
     assert caught.value.status_code == 500
     assert caught.value.detail == "DOCX generation library is missing on server."
@@ -400,10 +400,10 @@ async def test_docx_generation_error_returns_500(db):
 
     with (
         patch(f"{MODULE}.get_exam_by_id", new=AsyncMock(return_value=exam_data)),
-        patch("app.services.documents.docx_service.generate_exam_docx_bytes", side_effect=RuntimeError("DOCX failed")),
+        patch(f"{MODULE}.generate_exam_docx_bytes", side_effect=RuntimeError("DOCX failed")),
     ):
         with pytest.raises(HTTPException) as caught:
-            await exams.download_exam_docx_endpoint(6, db)
+            await exams.download_exam_docx_endpoint(6, include_answers=True, db=db)
 
     assert caught.value.status_code == 500
     assert caught.value.detail == "Unable to generate the exam Word document."

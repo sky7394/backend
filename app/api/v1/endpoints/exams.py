@@ -1,4 +1,10 @@
+try:
+    from app.services.documents.docx_service import generate_exam_docx_bytes
+except ImportError:
+    generate_exam_docx_bytes = None
+
 import logging
+from urllib.parse import quote
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -65,7 +71,6 @@ def _coerce_preview_result(result: Any) -> ExamPreviewOut:
     try:
         if isinstance(result, dict):
             return ExamPreviewOut(**result)
-
         return result
     except Exception as exc:
         logger.exception("Failed to parse internal preview result into response schema")
@@ -79,7 +84,6 @@ def _coerce_finalize_result(result: Any) -> ExamFinalizeOut:
     try:
         if isinstance(result, dict):
             return ExamFinalizeOut(**result)
-
         return result
     except Exception as exc:
         logger.exception("Failed to parse internal finalize result into response schema")
@@ -87,6 +91,33 @@ def _coerce_finalize_result(result: Any) -> ExamFinalizeOut:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to finalize the exam.",
         ) from exc
+
+
+def _serialize_exam_for_export(exam: Any) -> dict[str, Any]:
+    if hasattr(exam, "model_dump"):
+        try:
+            return exam.model_dump()
+        except TypeError:
+            return exam.model_dump()
+
+    if hasattr(exam, "dict"):
+        return exam.dict()
+
+    if hasattr(exam, "to_dict"):
+        return exam.to_dict()
+
+    if isinstance(exam, dict):
+        return exam
+
+    return {
+        "title": getattr(exam, "title", "آزمون"),
+        "questions": getattr(exam, "questions", []),
+    }
+
+
+def _build_content_disposition(filename: str) -> str:
+    encoded = quote(filename)
+    return f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded}'
 
 
 @router.post(
@@ -137,7 +168,6 @@ async def finalize_exam_endpoint(
             db,
             current_user=current_user,
         )
-
     except HTTPException:
         raise
     except (
@@ -215,6 +245,7 @@ async def list_exams_endpoint(
 )
 async def download_exam_pdf_endpoint(
     exam_id: int,
+    include_answers: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Response:
@@ -227,24 +258,11 @@ async def download_exam_pdf_endpoint(
         )
 
     try:
-        if hasattr(exam, "model_dump"):
-            try:
-                exam_data = exam.model_dump()
-            except TypeError:
-                exam_data = exam.model_dump()
-        elif hasattr(exam, "dict"):
-            exam_data = exam.dict()
-        elif hasattr(exam, "to_dict"):
-            exam_data = exam.to_dict()
-        elif isinstance(exam, dict):
-            exam_data = exam
-        else:
-            exam_data = {
-                "title": getattr(exam, "title", "آزمون"),
-                "questions": getattr(exam, "questions", []),
-            }
-
-        pdf_bytes = generate_exam_pdf_bytes(exam_data)
+        exam_data = _serialize_exam_for_export(exam)
+        pdf_bytes = generate_exam_pdf_bytes(
+            exam_data,
+            include_answers=include_answers,
+        )
     except Exception as exc:
         logger.exception("Failed to generate PDF for exam_id=%s", exam_id)
         raise HTTPException(
@@ -256,7 +274,7 @@ async def download_exam_pdf_endpoint(
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": _build_content_disposition(filename)},
     )
 
 
@@ -279,6 +297,7 @@ async def download_exam_pdf_endpoint(
 )
 async def download_exam_docx_endpoint(
     exam_id: int,
+    include_answers: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Response:
@@ -291,26 +310,21 @@ async def download_exam_docx_endpoint(
         )
 
     try:
-        from app.services.documents.docx_service import generate_exam_docx_bytes
+        exam_data = _serialize_exam_for_export(exam)
 
-        if hasattr(exam, "model_dump"):
-            try:
-                exam_data = exam.model_dump()
-            except TypeError:
-                exam_data = exam.model_dump()
-        elif hasattr(exam, "dict"):
-            exam_data = exam.dict()
-        elif hasattr(exam, "to_dict"):
-            exam_data = exam.to_dict()
-        elif isinstance(exam, dict):
-            exam_data = exam
-        else:
-            exam_data = {
-                "title": getattr(exam, "title", "آزمون"),
-                "questions": getattr(exam, "questions", []),
-            }
+        if generate_exam_docx_bytes is None:
+            logger.error("python-docx package is missing.")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="DOCX generation library is missing on server.",
+            )
 
-        docx_bytes = generate_exam_docx_bytes(exam_data)
+        docx_bytes = generate_exam_docx_bytes(
+            exam_data,
+            include_answers=include_answers,
+        )
+    except HTTPException:
+        raise
     except ModuleNotFoundError:
         logger.error("python-docx package is missing.")
         raise HTTPException(
@@ -328,5 +342,5 @@ async def download_exam_docx_endpoint(
     return Response(
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": _build_content_disposition(filename)},
     )
