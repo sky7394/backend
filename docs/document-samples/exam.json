@@ -1,0 +1,52 @@
+{
+  "title": "آزمون فیزیک دهم — حرکت و انرژی",
+  "grade": "دهم",
+  "subject": "فیزیک",
+  "header_config": {
+    "school_name": "دبیرستان نمونه دانش",
+    "course_name": "فیزیک ۱",
+    "grade_field": "دهم / ریاضی و فیزیک",
+    "teacher_name": "مریم احمدی",
+    "exam_date": "۱۴۰۵/۰۷/۲۳",
+    "exam_duration": "۹۰ دقیقه",
+    "exam_term": "نوبت اول",
+    "class_name": "۱۰۱",
+    "header_style": "official"
+  },
+  "questions": [
+    {
+      "question_text": "با استفاده از رابطه $v=\\frac{\\Delta x}{\\Delta t}$، سرعت متوسط جسمی را بیابید که در ۴ ثانیه، ۲۰ متر جابه‌جا شده است.",
+      "score": 3,
+      "answer_lines": 3,
+      "correct_answer": "$v=5\\,\\mathrm{m/s}$",
+      "explanation": "جابه‌جایی را بر زمان تقسیم می‌کنیم: $v=\\frac{20}{4}=5\\,\\mathrm{m/s}$."
+    },
+    {
+      "question_text": "یکای نیرو در دستگاه بین‌المللی کدام است؟",
+      "score": 1,
+      "options": [
+        "ژول",
+        "نیوتون",
+        "وات",
+        "پاسکال"
+      ],
+      "correct_answer": "گزینه ب: نیوتون",
+      "explanation": "از قانون دوم نیوتون داریم: $F=ma$."
+    },
+    {
+      "question_text": "با توجه به رابطهٔ زیر، انرژی جنبشی جسمی با جرم ۲ کیلوگرم و سرعت ۳ متر بر ثانیه را محاسبه کنید.",
+      "formula": "E_k=\\frac{1}{2}mv^2",
+      "score": 3,
+      "answer_lines": 3,
+      "correct_answer": "$E_k=9\\,\\mathrm{J}$",
+      "explanation": "با جای‌گذاری مقادیر: $E_k=\\frac{1}{2}\\times2\\times3^2=9$."
+    },
+    {
+      "question_text": "در رابطه $F=G\\frac{m_1m_2}{r^2}$ اگر فاصلهٔ دو جسم نصف شود و جرم‌ها ثابت بمانند، نیرو چند برابر می‌شود؟",
+      "score": 2,
+      "answer_lines": 2,
+      "correct_answer": "چهار برابر",
+      "explanation": "نیرو با مربع فاصله نسبت وارون دارد: $F^{\\prime}=4F$."
+    }
+  ]
+}

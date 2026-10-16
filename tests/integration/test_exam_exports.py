@@ -91,3 +91,50 @@ async def test_export_docx_success(
         )
         assert "attachment; filename=" in response.headers.get("content-disposition", "")
         assert len(response.content) > 0
+
+@pytest.mark.anyio
+async def test_export_pdf_success(
+    authenticated_client: AsyncClient,
+    mock_exam_data: ExamFinalizeOut,
+) -> None:
+    """بررسی دریافت موفقیت‌آمیز فایل PDF برای آزمون موجود."""
+    sample_exam_id = 1
+
+    with patch(
+        "app.api.v1.endpoints.exams.get_exam_by_id",
+        new_callable=AsyncMock,
+        return_value=mock_exam_data,
+    ):
+        response = await authenticated_client.get(
+            f"/api/v1/exam/{sample_exam_id}/pdf"
+        )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
+        assert "attachment; filename=" in response.headers.get("content-disposition", "")
+        assert response.content.startswith(b"%PDF-")
+
+
+@pytest.mark.anyio
+async def test_export_pdf_direct_payload(authenticated_client: AsyncClient) -> None:
+    """تست خروجی مستقیم PDF از طریق POST /api/v1/export/pdf"""
+    payload = {
+        "title": "آزمون فیزیک دهم",
+        "grade": "دهم",
+        "subject": "فیزیک",
+        "include_answers": True,
+        "questions": [
+            {
+                "question_text": "شتاب متحرک چند m/s^2 است؟",
+                "options": ["۲", "۴", "۸"],
+                "correct_answer": "۴",
+                "explanation": "پاسخ تشریحی تست",
+            }
+        ],
+    }
+    response = await authenticated_client.post("/api/v1/export/pdf", json=payload)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert "attachment; filename=" in response.headers.get("content-disposition", "")
+    assert response.content.startswith(b"%PDF-")
