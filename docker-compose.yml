@@ -1,0 +1,81 @@
+name: gapcode
+
+x-app: &app
+  image: gapcode-backend:local
+  build:
+    context: .
+    target: runtime
+  env_file:
+    - .env
+  environment:
+    # Explicit overrides keep a host-oriented .env from pointing at localhost.
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-gapcode}:${POSTGRES_PASSWORD:-gapcode_dev_password}@db:5432/${POSTGRES_DB:-gapcode}
+    REDIS_URL: redis://redis:6379/0
+    FONT_PATH: /usr/share/fonts/truetype/vazirmatn/Vazirmatn-Regular.ttf
+    GENERATED_PDF_DIR: /app/generated_pdfs
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  volumes:
+    - .:/app
+    - generated_pdfs:/app/generated_pdfs
+  init: true
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  stop_grace_period: 60s
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gapcode}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gapcode_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-gapcode}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  backend:
+    <<: *app
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  celery_worker:
+    <<: *app
+    # The Celery app currently does not autodiscover app.tasks.exam_tasks.
+    command: ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=info", "--include=app.tasks.exam_tasks"]
+    # The image HTTP healthcheck applies only to the API process.
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.tasks.celery_app inspect ping --destination celery@$$HOSTNAME --timeout 5"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  postgres_data:
+  redis_data:
+  generated_pdfs:

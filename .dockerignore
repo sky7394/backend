@@ -1,0 +1,78 @@
+# Virtual environments and dependency caches
+.venv
+.venv*
+venv
+venv*
+env
+ENV
+**/__pycache__
+**/*.py[cod]
+.cache
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.hypothesis
+.tox
+.nox
+
+# Version control, editor state, and local agent configuration
+.git
+.github
+.gitignore
+.agents
+.gapcode
+.idea
+.vscode
+**/*.swp
+**/*.swo
+.DS_Store
+Thumbs.db
+
+# Inject secrets at runtime, never bake them into the image
+.env
+.env.*
+!.env.example
+**/*.pem
+**/*.key
+
+# Tests and build artifacts
+tests
+.coverage*
+htmlcov
+coverage.xml
+pytest.xml
+test-results
+test_result.txt
+build
+dist
+**/*.egg-info
+*.whl
+
+# Runtime data and document exports (keep fonts and application templates)
+logs
+**/*.log
+**/*.pid
+generated_pdfs
+generated
+exports
+uploads
+tmp
+temp
+**/*.pdf
+**/*.docx
+**/*.sqlite*
+**/*.db
+dump.rdb
+appendonlydir
+celerybeat-schedule*
+
+# Local investigation output and container orchestration files
+bundle_pdf_context.txt
+quick-edit-context.txt
+rbac_files_dump.txt
+from
+tatus --short
+docs
+Dockerfile
+docker-compose*.yml
+.dockerignore
