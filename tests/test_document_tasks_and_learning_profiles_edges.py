@@ -34,23 +34,23 @@ def test_create_exam_pdf_task():
 
 @pytest.fixture
 def fake_user():
-    user = object.__new__(User)
-    user.__dict__["id"] = uuid4()
-    user.__dict__["phone_number"] = "09123456789"
+    user = MagicMock(spec=User)
+    user.id = uuid4()
+    user.phone_number = "09123456789"
     return user
 
 
 @pytest.fixture
 def fake_profile(fake_user):
-    profile = object.__new__(LearningProfile)
-    profile.__dict__["id"] = uuid4()
-    profile.__dict__["user_id"] = fake_user.id
-    profile.__dict__["target_field"] = "Math"
-    profile.__dict__["target_grade"] = "12"
-    profile.__dict__["weak_topics"] = ["Calculus"]
-    profile.__dict__["strong_topics"] = ["Algebra"]
-    profile.__dict__["daily_study_goal_minutes"] = 120
-    profile.__dict__["weekly_exam_goal_count"] = 2
+    profile = MagicMock(spec=LearningProfile)
+    profile.id = uuid4()
+    profile.user_id = fake_user.id
+    profile.target_field = "Math"
+    profile.target_grade = "12"
+    profile.weak_topics = ["Calculus"]
+    profile.strong_topics = ["Algebra"]
+    profile.daily_study_goal_minutes = 120
+    profile.weekly_exam_goal_count = 2
     return profile
 
 
