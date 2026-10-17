@@ -1,5 +1,3 @@
-# app/schemas/user.py
-
 from uuid import UUID
 from pydantic import BaseModel, EmailStr, ConfigDict
 
@@ -28,6 +26,10 @@ class UserBase(BaseModel):
     email: EmailStr
     full_name: str | None = None
     role: str
+
+
+class UserResponse(UserBase):
+    pass
 
 
 class TokenResponse(BaseModel):
