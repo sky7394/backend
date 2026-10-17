@@ -154,3 +154,97 @@ def test_orbital_explanation_cannot_deny_gravity():
         match="Orbital explanation incorrectly denies gravity's role",
     ):
         validate_scientific_content(question)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        SimpleNamespace(choices=None),
+        SimpleNamespace(choices=[]),
+        SimpleNamespace(choices=[None]),
+        SimpleNamespace(choices=[SimpleNamespace(message=None)]),
+        SimpleNamespace(choices=[SimpleNamespace()]),
+    ],
+)
+def test_generate_exam_rejects_malformed_provider_response(
+    monkeypatch,
+    response,
+):
+    with pytest.raises(AIProviderResponseError):
+        _generate_with_response(
+            monkeypatch,
+            response=response,
+        )
+
+
+def test_generate_exam_closes_http_client_on_success(monkeypatch):
+    import app.services.ai.gpt_service as gpt_service
+
+    class FakeHttpClient:
+        closed = False
+
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def close(self):
+            self.closed = True
+
+    fake_http_client = FakeHttpClient()
+
+    response = _response(
+        '{"title": "Physics exam", "questions": []}'
+    )
+
+    fake_openai_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=lambda **kwargs: response
+            )
+        )
+    )
+
+    monkeypatch.setattr(
+        gpt_service.settings,
+        "OPENAI_API_KEY",
+        "test-key",
+    )
+    monkeypatch.setattr(
+        gpt_service.settings,
+        "OPENAI_BASE_URL",
+        "https://provider.test/v1",
+    )
+    monkeypatch.setattr(
+        gpt_service.httpx,
+        "Client",
+        lambda **kwargs: fake_http_client,
+    )
+    monkeypatch.setattr(
+        gpt_service,
+        "OpenAI",
+        lambda **kwargs: fake_openai_client,
+    )
+    monkeypatch.setattr(
+        gpt_service,
+        "normalize_questions",
+        lambda data, request: [],
+    )
+
+    result = gpt_service.generate_exam(_request())
+
+    assert result.title == "Physics exam"
+    assert fake_http_client.closed is True
+
+
+def test_generate_exam_does_not_log_provider_body(
+    monkeypatch,
+    caplog,
+):
+    secret_text = "super-sensitive-provider-body"
+
+    with pytest.raises(AIProviderCommunicationError):
+        _generate_with_response(
+            monkeypatch,
+            error=RuntimeError(secret_text),
+        )
+
+    assert secret_text not in caplog.text
